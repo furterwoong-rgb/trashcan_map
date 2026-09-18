@@ -730,21 +730,24 @@
     }
 
     // ==========================================
-    // 11. 길찾기 URL 세팅 (카카오맵, 네이버, 구글)
+    // 11. 길찾기 URL 세팅 (카카오맵, 네이버, 구글 최적화)
     // ==========================================
     function setupNavigationLinks(item) {
-      const sName = encodeURIComponent('내 위치');
-      const eName = encodeURIComponent(item.name);
+      // 지도앱이 100% 인식할 수 있도록 정밀 도로명 주소를 메인으로 지정
+      const destTitle = item.addr ? `${item.addr} (${item.name})` : item.name;
+      const encodedTitle = encodeURIComponent(destTitle);
 
-      // 카카오맵 도보 길찾기 (출발지: 내 위치 좌표, 도착지: 쓰레기통 위치 좌표 자동 입력)
-      const kakaoUrl = `https://map.kakao.com/?target=walk&sName=${sName}&sX=${userPos.lng}&sY=${userPos.lat}&eName=${eName}&eX=${item.lng}&eY=${item.lat}`;
+      // 1. 카카오맵 공식 표준 길찾기 딥링크 (내 현재 위치 -> 도착지 도로명주소/좌표)
+      // 모바일 카카오맵 앱 및 웹 공통으로 출발지 충돌 없이 원클릭 도보 안내 지원
+      const kakaoUrl = `https://map.kakao.com/link/to/${encodedTitle},${item.lat},${item.lng}`;
       document.getElementById('link-kakaomap').href = kakaoUrl;
 
-      // 네이버 지도 도보 길찾기 (출발지: 내 위치 좌표, 도착지: 쓰레기통 위치 좌표 자동 입력)
-      const naverUrl = `https://map.naver.com/v5/directions/${userPos.lng},${userPos.lat},${sName}/${item.lng},${item.lat},${eName}/-/walk`;
+      // 2. 네이버 지도 공식 directions v5 도보 길찾기
+      // 출발지를 '-'로 설정하여 앱/웹 자체 실시간 GPS에서 목적지 도로명주소/좌표로 도보(walk) 자동 탐색
+      const naverUrl = `https://map.naver.com/v5/directions/-/${item.lng},${item.lat},${encodedTitle}/-/walk`;
       document.getElementById('link-navermap').href = naverUrl;
 
-      // 구글 지도 도보 길찾기 (출발지: 내 위치 좌표, 도착지: 쓰레기통 위치 좌표 자동 입력)
+      // 3. 구글 지도 공식 도보 길찾기 (출발지 위경도 -> 도착지 위경도 좌표 1:1 매칭)
       const googleUrl = `https://www.google.com/maps/dir/?api=1&origin=${userPos.lat},${userPos.lng}&destination=${item.lat},${item.lng}&travelmode=walking`;
       document.getElementById('link-googlemap').href = googleUrl;
     }
