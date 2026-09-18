@@ -1,0 +1,896 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <title>쓱싹 - 내 주변 쓰레기통 찾기</title>
+  
+  <!-- Pretendard Font for Toss/Karrot modern aesthetic -->
+  <link rel="stylesheet" as="style" crossorigin href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.min.css" />
+  
+  <!-- Tailwind CSS CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          fontFamily: {
+            sans: ['Pretendard', '-apple-system', 'BlinkMacSystemFont', 'system-ui', 'Roboto', 'sans-serif'],
+          },
+          colors: {
+            brand: {
+              50: '#EEF6FF',
+              100: '#D9ECFF',
+              500: '#3182F6', // Toss Blue
+              600: '#1B64DA',
+              700: '#134BB8'
+            },
+            cigarette: {
+              500: '#F97316', // Orange
+              600: '#EA580C'
+            },
+            recycle: {
+              500: '#10B981', // Emerald
+              600: '#059669'
+            }
+          },
+          boxShadow: {
+            'floating': '0 10px 30px -5px rgba(0, 0, 0, 0.12), 0 4px 10px -2px rgba(0, 0, 0, 0.05)',
+            'sheet': '0 -8px 25px -4px rgba(0, 0, 0, 0.08), 0 -4px 10px -2px rgba(0, 0, 0, 0.04)',
+          }
+        }
+      }
+    }
+  </script>
+
+  <!-- Leaflet CSS & JS -->
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin=""/>
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+
+  <style>
+    /* iOS Safari Full Screen Fix & Clean Touch */
+    html, body {
+      height: 100%;
+      width: 100%;
+      margin: 0;
+      padding: 0;
+      overflow: hidden;
+      -webkit-tap-highlight-color: transparent;
+      user-select: none;
+    }
+    
+    #map {
+      height: 100%;
+      width: 100%;
+      z-index: 0;
+    }
+
+    /* Hide Leaflet Default Control Clutter */
+    .leaflet-control-attribution {
+      font-size: 9px !important;
+      background: rgba(255, 255, 255, 0.7) !important;
+      backdrop-filter: blur(4px);
+      margin: 0 !important;
+      padding: 2px 6px !important;
+      border-top-left-radius: 6px;
+    }
+    .leaflet-top.leaflet-left, .leaflet-bottom.leaflet-left {
+      display: none;
+    }
+
+    /* Marker Pulse Animation */
+    .pulse-dot-container {
+      position: relative;
+      width: 28px;
+      height: 28px;
+    }
+    .pulse-ring {
+      position: absolute;
+      width: 100%;
+      height: 100%;
+      border-radius: 50%;
+      background-color: rgba(49, 130, 246, 0.4);
+      animation: pulseAnimation 2s cubic-bezier(0.25, 1, 0.5, 1) infinite;
+    }
+    .pulse-core {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      width: 14px;
+      height: 14px;
+      border-radius: 50%;
+      background-color: #3182F6;
+      border: 2.5px solid #FFFFFF;
+      box-shadow: 0 2px 6px rgba(0,0,0,0.3);
+    }
+    @keyframes pulseAnimation {
+      0% {
+        transform: scale(0.6);
+        opacity: 0.9;
+      }
+      80% {
+        transform: scale(2.6);
+        opacity: 0;
+      }
+      100% {
+        transform: scale(2.8);
+        opacity: 0;
+      }
+    }
+
+    /* Trash Marker Pin Animation */
+    .trash-pin {
+      transition: transform 0.2s cubic-bezier(0.34, 1.56, 0.64, 1);
+    }
+    .trash-pin:hover, .trash-pin.active {
+      transform: translateY(-6px) scale(1.1);
+      z-index: 999 !important;
+    }
+
+    /* Polyline Animated Dash */
+    .guide-polyline {
+      stroke-dasharray: 8, 8;
+      animation: dashMove 1.5s linear infinite;
+    }
+    @keyframes dashMove {
+      to {
+        stroke-dashoffset: -16;
+      }
+    }
+  </style>
+</head>
+<body class="bg-gray-100 font-sans text-gray-900 antialiased h-screen w-screen overflow-hidden flex flex-col relative">
+
+  <!-- Fullscreen Map Container -->
+  <div id="map" class="absolute inset-0"></div>
+
+  <!-- Top Navigation & Floating Controls (Header) -->
+  <header class="absolute top-0 inset-x-0 z-20 px-4 pt-safe-top pt-4 pointer-events-none">
+    <div class="max-w-md mx-auto pointer-events-auto space-y-2.5">
+      <!-- Title Bar -->
+      <div class="bg-white/90 backdrop-blur-md rounded-2xl px-4 py-3 shadow-floating flex items-center justify-between border border-white/60">
+        <div class="flex items-center space-x-2.5">
+          <div class="w-8 h-8 rounded-xl bg-brand-500 text-white flex items-center justify-center font-black text-sm shadow-md shadow-brand-500/30">
+            쓱
+          </div>
+          <div>
+            <h1 class="text-base font-bold text-gray-900 tracking-tight leading-none flex items-center gap-1.5">
+              쓱싹 <span class="text-xs font-semibold px-2 py-0.5 rounded-full bg-brand-50 text-brand-600">내 주변 쓰레기통</span>
+            </h1>
+            <p id="sub-status" class="text-[11px] text-gray-500 mt-0.5 leading-tight font-medium">
+              GPS 위치 파악 중...
+            </p>
+          </div>
+        </div>
+
+        <div class="flex items-center space-x-1.5">
+          <!-- Refresh / Re-detect Button -->
+          <button id="btn-refresh" title="내 위치 다시 찾기" class="p-2 rounded-xl text-gray-500 hover:text-brand-600 hover:bg-gray-100 active:scale-95 transition-all">
+            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+            </svg>
+          </button>
+        </div>
+      </div>
+
+      <!-- Filter Buttons (Chips) -->
+      <div class="flex items-center gap-1.5 overflow-x-auto no-scrollbar py-0.5">
+        <button data-filter="all" class="filter-chip active flex items-center gap-1.5 px-3.5 py-1.5 rounded-full text-xs font-semibold bg-gray-900 text-white shadow-md transition-all active:scale-95">
+          <span>전체</span>
+          <span id="badge-all" class="text-[10px] opacity-75">15</span>
+        </button>
+        <button data-filter="recycle" class="filter-chip flex items-center gap-1.5 px-3.5 py-1.5 rounded-full text-xs font-semibold bg-white/90 backdrop-blur-md text-gray-700 shadow-sm border border-gray-200/60 hover:bg-white active:scale-95 transition-all">
+          <span class="w-2 h-2 rounded-full bg-brand-500"></span>
+          <span>일반·재활용</span>
+          <span id="badge-recycle" class="text-[10px] text-gray-400">0</span>
+        </button>
+        <button data-filter="cigarette" class="filter-chip flex items-center gap-1.5 px-3.5 py-1.5 rounded-full text-xs font-semibold bg-white/90 backdrop-blur-md text-gray-700 shadow-sm border border-gray-200/60 hover:bg-white active:scale-95 transition-all">
+          <span class="w-2 h-2 rounded-full bg-cigarette-500"></span>
+          <span>담배꽁초</span>
+          <span id="badge-cigarette" class="text-[10px] text-gray-400">0</span>
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <!-- Floating Action Buttons (Right-Center) -->
+  <div class="absolute right-4 bottom-56 z-20 flex flex-col gap-2.5">
+    <button id="btn-recenter" class="w-11 h-11 rounded-2xl bg-white shadow-floating border border-gray-100 flex items-center justify-center text-gray-700 hover:text-brand-500 active:scale-90 transition-all" title="내 위치로 이동">
+      <svg class="w-5 h-5 text-gray-700 hover:text-brand-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"/>
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"/>
+      </svg>
+    </button>
+  </div>
+
+  <!-- Bottom Sheet Card -->
+  <div class="absolute inset-x-0 bottom-0 z-20 px-3 pb-4 pointer-events-none">
+    <div class="max-w-md mx-auto pointer-events-auto">
+      <div id="bottom-sheet" class="bg-white/95 backdrop-blur-xl rounded-3xl p-5 shadow-sheet border border-gray-200/70 transition-all duration-300 transform translate-y-0">
+        
+        <!-- Sheet Top Handle -->
+        <div class="w-10 h-1 bg-gray-300/80 rounded-full mx-auto mb-3.5"></div>
+
+        <!-- Target Info Header -->
+        <div class="flex items-start justify-between gap-3">
+          <div class="flex-1 min-w-0">
+            <div class="flex items-center gap-2 mb-1">
+              <span id="sheet-badge" class="px-2 py-0.5 rounded-md text-[11px] font-bold bg-brand-50 text-brand-600">
+                가장 가까운 곳
+              </span>
+              <span id="sheet-category" class="text-xs text-gray-500 font-medium">
+                일반·재활용
+              </span>
+            </div>
+            <h2 id="sheet-title" class="text-lg font-bold text-gray-900 truncate leading-snug">
+              강남역 11번 출구 앞
+            </h2>
+            <p id="sheet-desc" class="text-xs text-gray-500 truncate mt-0.5">
+              지하철 출구 바로 앞 공공 수거함
+            </p>
+          </div>
+
+          <!-- Distance & ETA Highlight Badge -->
+          <div class="text-right flex-shrink-0 bg-blue-50/80 border border-blue-100 rounded-2xl px-3 py-2">
+            <div id="sheet-distance" class="text-base font-extrabold text-brand-600 leading-none">
+              45m
+            </div>
+            <div id="sheet-walk-time" class="text-[11px] font-semibold text-brand-500 mt-1 leading-none">
+              도보 1분
+            </div>
+          </div>
+        </div>
+
+        <!-- Divider -->
+        <div class="h-px bg-gray-100 my-4"></div>
+
+        <!-- Action Buttons -->
+        <div class="flex items-center gap-2.5">
+          <!-- Guide to Route (Polyline toggle) -->
+          <button id="btn-show-line" class="flex-1 flex items-center justify-center gap-2 py-3 px-4 rounded-2xl bg-brand-500 hover:bg-brand-600 active:scale-[0.98] text-white font-bold text-sm shadow-md shadow-brand-500/25 transition-all">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M13 7l5 5m0 0l-5 5m5-5H6"/>
+            </svg>
+            <span>경로 점선 표시</span>
+          </button>
+
+          <!-- External Map Navigate Link -->
+          <button id="btn-navigate" class="flex items-center justify-center gap-1.5 py-3 px-4 rounded-2xl bg-gray-100 hover:bg-gray-200 active:scale-[0.98] text-gray-800 font-semibold text-sm transition-all" title="외부 지도 앱 길찾기">
+            <svg class="w-4 h-4 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 20l-5.447-2.724A1 1 0 013 16.382V5.618a1 1 0 011.447-.894L9 7m0 13l6-3m-6 3V7m6 10l4.553 2.276A1 1 0 0021 18.382V7.618a1 1 0 00-.553-.894L15 4m0 13V4m0 0L9 7"/>
+            </svg>
+            <span>길찾기</span>
+          </button>
+        </div>
+
+      </div>
+    </div>
+  </div>
+
+  <!-- Navigation Option Modal (카카오맵 / 네이버맵 / 구글맵 선택) -->
+  <div id="nav-modal" class="fixed inset-0 z-50 bg-black/40 backdrop-blur-sm hidden items-end sm:items-center justify-center p-4">
+    <div class="bg-white rounded-3xl max-w-sm w-full p-5 shadow-2xl space-y-3 transform transition-all">
+      <div class="flex items-center justify-between pb-1">
+        <h3 class="text-base font-bold text-gray-900">도보 길찾기 앱 선택</h3>
+        <button id="btn-close-modal" class="text-gray-400 hover:text-gray-600 p-1">
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+          </svg>
+        </button>
+      </div>
+      <p class="text-xs text-gray-500 leading-relaxed">
+        선택하신 앱으로 목적지까지의 도보 길찾기 화면을 바로 열어드립니다.
+      </p>
+      <div class="space-y-2 pt-2">
+        <a id="link-kakaomap" target="_blank" class="flex items-center justify-between p-3.5 rounded-2xl bg-yellow-50 hover:bg-yellow-100/80 border border-yellow-200/70 text-yellow-950 font-semibold text-sm transition-all">
+          <div class="flex items-center gap-2.5">
+            <span class="w-6 h-6 rounded-lg bg-[#FEE500] text-black font-black flex items-center justify-center text-xs shadow-sm">K</span>
+            <span>카카오맵으로 길찾기</span>
+          </div>
+          <span class="text-xs text-yellow-800">열기 &rarr;</span>
+        </a>
+        <a id="link-navermap" target="_blank" class="flex items-center justify-between p-3.5 rounded-2xl bg-green-50 hover:bg-green-100/80 border border-green-200/70 text-green-950 font-semibold text-sm transition-all">
+          <div class="flex items-center gap-2.5">
+            <span class="w-6 h-6 rounded-lg bg-[#03C75A] text-white font-black flex items-center justify-center text-xs shadow-sm">N</span>
+            <span>네이버 지도로 길찾기</span>
+          </div>
+          <span class="text-xs text-green-800">열기 &rarr;</span>
+        </a>
+        <a id="link-googlemap" target="_blank" class="flex items-center justify-between p-3.5 rounded-2xl bg-blue-50 hover:bg-blue-100/80 border border-blue-200/70 text-blue-950 font-semibold text-sm transition-all">
+          <div class="flex items-center gap-2.5">
+            <span class="w-6 h-6 rounded-lg bg-[#4285F4] text-white font-black flex items-center justify-center text-xs shadow-sm">G</span>
+            <span>구글 지도로 길찾기</span>
+          </div>
+          <span class="text-xs text-blue-800">열기 &rarr;</span>
+        </a>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // ==========================================
+    // 1. 상태 및 상수 정의
+    // ==========================================
+    // Fallback 위치: 강남역 11번 출구
+    const DEFAULT_LOCATION = {
+      lat: 37.498085,
+      lng: 127.027978,
+      name: "강남역 11번 출구 (기본 위치)"
+    };
+
+    let userPos = { lat: DEFAULT_LOCATION.lat, lng: DEFAULT_LOCATION.lng };
+    let currentFilter = 'all'; // 'all' | 'recycle' | 'cigarette'
+    let selectedTrash = null;
+    let closestTrash = null;
+
+    let map = null;
+    let userMarker = null;
+    let markerLayerGroup = null;
+    let guidePolyline = null;
+
+    // ==========================================
+    // 2. 강남역 주변 더미 데이터 (15개)
+    // ==========================================
+    const MOCK_TRASH_DATA = [
+      {
+        id: 1,
+        name: "강남역 11번 출구 계단 앞",
+        lat: 37.498320,
+        lng: 127.027740,
+        type: "both",
+        desc: "지하철역 출구 직진 방향, 일반 및 재활용 분리수거함"
+      },
+      {
+        id: 2,
+        name: "강남역 10번 출구 버스정류장",
+        lat: 37.498680,
+        lng: 127.027200,
+        type: "recycle",
+        desc: "광역버스 승강장 대기열 옆 일반/캔/페트 분리수거함"
+      },
+      {
+        id: 3,
+        name: "강남역 12번 출구 다이소 앞",
+        lat: 37.499050,
+        lng: 127.028750,
+        type: "both",
+        desc: "대로변 보행로 가로변 쓰레기통 및 담배꽁초 수거함"
+      },
+      {
+        id: 4,
+        name: "CGV 강남 뒤편 먹자골목 입구",
+        lat: 37.501300,
+        lng: 127.026850,
+        type: "cigarette",
+        desc: "음식점 골목 시작 지점 스마트 꽁초 전용 수거함"
+      },
+      {
+        id: 5,
+        name: "메가박스 강남 골목 공용 쉼터",
+        lat: 37.497550,
+        lng: 127.026400,
+        type: "both",
+        desc: "영화관 후문 보행로 벤치 옆 분리수거함"
+      },
+      {
+        id: 6,
+        name: "신논현역 6번 출구 교보타워 앞",
+        lat: 37.503650,
+        lng: 127.024950,
+        type: "recycle",
+        desc: "교보문고 앞 횡단보도 대기 구역 쓰레기통"
+      },
+      {
+        id: 7,
+        name: "강남역 1번 출구 테헤란로 방면",
+        lat: 37.497250,
+        lng: 127.028850,
+        type: "recycle",
+        desc: "금융센터 앞 보도블록 가로변 분리수거함"
+      },
+      {
+        id: 8,
+        name: "강남역 여삼빌딩 뒷골목 흡연구역",
+        lat: 37.499100,
+        lng: 127.029800,
+        type: "cigarette",
+        desc: "빌딩 후면 지정 흡연구역 내 대형 재떨이 수거함"
+      },
+      {
+        id: 9,
+        name: "신논현 먹자골목 사거리 쉼터",
+        lat: 37.502900,
+        lng: 127.027200,
+        type: "both",
+        desc: "보행자 전용도로 코너 클린스팟"
+      },
+      {
+        id: 10,
+        name: "강남역 9번 출구 부티크모나코 앞",
+        lat: 37.497900,
+        lng: 127.025400,
+        type: "recycle",
+        desc: "오피스 밀집 구역 캔/플라스틱 전용 쓰레기통"
+      },
+      {
+        id: 11,
+        name: "강남역 스파오(SPAO) 건물 앞",
+        lat: 37.499700,
+        lng: 127.026700,
+        type: "both",
+        desc: "강남대로 중심 쇼핑거리 보행로 쓰레기통"
+      },
+      {
+        id: 12,
+        name: "역삼1동 주민센터 인근 공원",
+        lat: 37.495800,
+        lng: 127.032100,
+        type: "both",
+        desc: "어린이공원 입구 재활용 분리수거대"
+      },
+      {
+        id: 13,
+        name: "강남역 우성아파트사거리 버스정류장",
+        lat: 37.492900,
+        lng: 127.029800,
+        type: "recycle",
+        desc: "중앙차로 버스정류소 일반/재활용 수거함"
+      },
+      {
+        id: 14,
+        name: "강남역 국기원입구 사거리 골목",
+        lat: 37.500500,
+        lng: 127.031500,
+        type: "cigarette",
+        desc: "카페 밀집구역 골목길 꽁초 전용 수거함"
+      },
+      {
+        id: 15,
+        name: "강남역 5번 출구 남부순환로 방면",
+        lat: 37.495200,
+        lng: 127.027900,
+        type: "both",
+        desc: "삼성전자 서초사옥 맞은편 보도 쓰레기통"
+      }
+    ];
+
+    // ==========================================
+    // 3. 거리 계산 (Haversine Formula) & 도보 시간
+    // ==========================================
+    function calculateDistance(lat1, lon1, lat2, lon2) {
+      const R = 6371e3; // meters
+      const φ1 = lat1 * Math.PI / 180;
+      const φ2 = lat2 * Math.PI / 180;
+      const Δφ = (lat2 - lat1) * Math.PI / 180;
+      const Δλ = (lon2 - lon1) * Math.PI / 180;
+
+      const a = Math.sin(Δφ / 2) * Math.sin(Δφ / 2) +
+                Math.cos(φ1) * Math.cos(φ2) *
+                Math.sin(Δλ / 2) * Math.sin(Δλ / 2);
+      const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+
+      return Math.round(R * c); // Distance in meters
+    }
+
+    function formatDistance(meters) {
+      if (meters < 1000) {
+        return `${meters}m`;
+      }
+      return `${(meters / 1000).toFixed(1)}km`;
+    }
+
+    function calculateWalkTime(meters) {
+      // 평균 도보 속도: 시속 4km = 분당 약 67m
+      const minutes = Math.max(1, Math.round(meters / 67));
+      return `도보 ${minutes}분`;
+    }
+
+    // ==========================================
+    // 4. 지도 초기화 (CartoDB Positron: 미니멀 테마)
+    // ==========================================
+    function initMap() {
+      map = L.map('map', {
+        center: [userPos.lat, userPos.lng],
+        zoom: 17,
+        zoomControl: false,
+        attributionControl: true
+      });
+
+      // Toss / Karrot 스타일의 초미니멀 밝은 타일맵 (CartoDB Positron)
+      L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', {
+        subdomains: 'abcd',
+        maxZoom: 20,
+        attribution: '&copy; <a href="https://carto.com/">CARTO</a> &copy; OpenStreetMap'
+      }).addTo(map);
+
+      markerLayerGroup = L.layerGroup().addTo(map);
+
+      // 내 위치 펄스 마커 렌더링
+      renderUserMarker();
+
+      // 쓰레기통 마커 및 초기 최근접 계산
+      updateTrashMarkers();
+    }
+
+    // ==========================================
+    // 5. 내 위치 펄스 마커
+    // ==========================================
+    function renderUserMarker() {
+      const pulseIcon = L.divIcon({
+        className: 'custom-pulse-marker',
+        html: `
+          <div class="pulse-dot-container">
+            <div class="pulse-ring"></div>
+            <div class="pulse-core"></div>
+          </div>
+        `,
+        iconSize: [28, 28],
+        iconAnchor: [14, 14]
+      });
+
+      if (userMarker) {
+        userMarker.setLatLng([userPos.lat, userPos.lng]);
+      } else {
+        userMarker = L.marker([userPos.lat, userPos.lng], {
+          icon: pulseIcon,
+          zIndexOffset: 1000
+        }).addTo(map);
+      }
+    }
+
+    // ==========================================
+    // 6. 쓰레기통 커스텀 마커 생성
+    // ==========================================
+    function getMarkerIcon(type, isClosest = false) {
+      let bgColor = "#3182F6"; // Toss Blue for recycle/both
+      let iconSvg = "";
+
+      if (type === 'cigarette') {
+        bgColor = "#F97316"; // Orange
+        // Cigarette SVG
+        iconSvg = `
+          <svg class="w-4 h-4 text-white" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M18 12H2v4h16"/>
+            <path d="M22 12v4"/>
+            <path d="M7 12v4"/>
+            <path d="M18 8c0-2.5-2-2.5-2-5"/>
+            <path d="M22 8c0-2.5-2-2.5-2-5"/>
+          </svg>
+        `;
+      } else if (type === 'recycle') {
+        bgColor = "#3182F6"; // Blue
+        // Recycle Trash Icon
+        iconSvg = `
+          <svg class="w-4 h-4 text-white" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M3 6h18"/>
+            <path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/>
+            <path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/>
+            <line x1="10" y1="11" x2="10" y2="17"/>
+            <line x1="14" y1="11" x2="14" y2="17"/>
+          </svg>
+        `;
+      } else {
+        // Both (일반 + 꽁초) - Emerald Teal
+        bgColor = "#10B981";
+        iconSvg = `
+          <svg class="w-4 h-4 text-white" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M3 6h18M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>
+            <path d="M10 11v6M14 11v6"/>
+          </svg>
+        `;
+      }
+
+      const ringClass = isClosest ? "ring-4 ring-brand-500/40 animate-bounce" : "";
+
+      return L.divIcon({
+        className: 'custom-trash-icon',
+        html: `
+          <div class="trash-pin relative flex flex-col items-center cursor-pointer">
+            <div class="w-8 h-8 rounded-full shadow-lg flex items-center justify-center ${ringClass}" style="background-color: ${bgColor};">
+              ${iconSvg}
+            </div>
+            <div class="w-2 h-2 rotate-45 -mt-1 shadow-sm" style="background-color: ${bgColor};"></div>
+          </div>
+        `,
+        iconSize: [32, 36],
+        iconAnchor: [16, 34]
+      });
+    }
+
+    // ==========================================
+    // 7. 쓰레기통 마커 갱신 및 최근접 탐색
+    // ==========================================
+    function updateTrashMarkers() {
+      markerLayerGroup.clearLayers();
+
+      // 필터링 적용
+      const filtered = MOCK_TRASH_DATA.filter(item => {
+        if (currentFilter === 'all') return true;
+        if (currentFilter === 'recycle') return item.type === 'recycle' || item.type === 'both';
+        if (currentFilter === 'cigarette') return item.type === 'cigarette' || item.type === 'both';
+        return true;
+      });
+
+      // 각 항목과 현재 위치 간의 거리 계산
+      const itemsWithDistance = filtered.map(item => ({
+        ...item,
+        distance: calculateDistance(userPos.lat, userPos.lng, item.lat, item.lng)
+      })).sort((a, b) => a.distance - b.distance);
+
+      // 뱃지 개수 업데이트
+      updateBadges();
+
+      if (itemsWithDistance.length === 0) return;
+
+      // 가장 가까운 쓰레기통
+      closestTrash = itemsWithDistance[0];
+
+      // 현재 선택된 쓰레기통이 없거나 필터에서 빠졌으면 가장 가까운 것으로 설정
+      if (!selectedTrash || !filtered.some(f => f.id === selectedTrash.id)) {
+        selectedTrash = closestTrash;
+      } else {
+        // 거리 갱신
+        selectedTrash = itemsWithDistance.find(it => it.id === selectedTrash.id) || closestTrash;
+      }
+
+      // 마커 생성 및 지도에 추가
+      itemsWithDistance.forEach(item => {
+        const isClosest = (item.id === closestTrash.id);
+        const marker = L.marker([item.lat, item.lng], {
+          icon: getMarkerIcon(item.type, isClosest)
+        });
+
+        marker.on('click', () => {
+          selectTrashItem(item);
+        });
+
+        markerLayerGroup.addLayer(marker);
+      });
+
+      // 바텀 시트 업데이트 & 점선 그리기
+      updateBottomSheet(selectedTrash);
+      drawGuidePolyline(selectedTrash);
+    }
+
+    // ==========================================
+    // 8. 내 위치 ~ 목적지 점선(Polyline) 그리기
+    // ==========================================
+    function drawGuidePolyline(targetItem) {
+      if (!targetItem) return;
+
+      if (guidePolyline) {
+        map.removeLayer(guidePolyline);
+      }
+
+      const latlngs = [
+        [userPos.lat, userPos.lng],
+        [targetItem.lat, targetItem.lng]
+      ];
+
+      guidePolyline = L.polyline(latlngs, {
+        color: '#3182F6',
+        weight: 4,
+        opacity: 0.85,
+        lineCap: 'round',
+        className: 'guide-polyline'
+      }).addTo(map);
+    }
+
+    // ==========================================
+    // 9. 특정 쓰레기통 선택 시 UI 및 지도 이동
+    // ==========================================
+    function selectTrashItem(item) {
+      selectedTrash = item;
+      updateBottomSheet(item);
+      drawGuidePolyline(item);
+
+      // 지도 부드럽게 이동 (바텀시트 높이를 감안하여 살짝 아래 오프셋)
+      map.flyTo([item.lat, item.lng], 18, {
+        duration: 0.8,
+        easeLinearity: 0.25
+      });
+    }
+
+    // ==========================================
+    // 10. 바텀 시트 UI 업데이트
+    // ==========================================
+    function updateBottomSheet(item) {
+      if (!item) return;
+
+      const isClosest = closestTrash && (item.id === closestTrash.id);
+      const sheetBadge = document.getElementById('sheet-badge');
+      const sheetCategory = document.getElementById('sheet-category');
+      const sheetTitle = document.getElementById('sheet-title');
+      const sheetDesc = document.getElementById('sheet-desc');
+      const sheetDistance = document.getElementById('sheet-distance');
+      const sheetWalkTime = document.getElementById('sheet-walk-time');
+
+      if (isClosest) {
+        sheetBadge.textContent = "📍 가장 가까운 곳";
+        sheetBadge.className = "px-2 py-0.5 rounded-md text-[11px] font-bold bg-brand-50 text-brand-600";
+      } else {
+        sheetBadge.textContent = "선택된 위치";
+        sheetBadge.className = "px-2 py-0.5 rounded-md text-[11px] font-bold bg-gray-100 text-gray-700";
+      }
+
+      // 카테고리 텍스트
+      if (item.type === 'recycle') {
+        sheetCategory.textContent = "일반 · 재활용";
+      } else if (item.type === 'cigarette') {
+        sheetCategory.textContent = "담배꽁초 수거함";
+      } else {
+        sheetCategory.textContent = "일반 + 꽁초 수거함";
+      }
+
+      sheetTitle.textContent = item.name;
+      sheetDesc.textContent = item.desc || "상세 설명이 없는 장소입니다.";
+
+      const dist = item.distance !== undefined ? item.distance : calculateDistance(userPos.lat, userPos.lng, item.lat, item.lng);
+      sheetDistance.textContent = formatDistance(dist);
+      sheetWalkTime.textContent = calculateWalkTime(dist);
+
+      // 외부 길찾기 링크 세팅
+      setupNavigationLinks(item);
+    }
+
+    // ==========================================
+    // 11. 길찾기 URL 세팅 (카카오맵, 네이버, 구글)
+    // ==========================================
+    function setupNavigationLinks(item) {
+      // 카카오맵 도보 길찾기
+      const kakaoUrl = `https://map.kakao.com/link/to/${encodeURIComponent(item.name)},${item.lat},${item.lng}`;
+      document.getElementById('link-kakaomap').href = kakaoUrl;
+
+      // 네이버 지도 길찾기
+      const naverUrl = `https://map.naver.com/v5/directions/-/${item.lng},${item.lat},${encodeURIComponent(item.name)}/-/walk`;
+      document.getElementById('link-navermap').href = naverUrl;
+
+      // 구글 지도 길찾기
+      const googleUrl = `https://www.google.com/maps/dir/?api=1&origin=${userPos.lat},${userPos.lng}&destination=${item.lat},${item.lng}&travelmode=walking`;
+      document.getElementById('link-googlemap').href = googleUrl;
+    }
+
+    // ==========================================
+    // 12. 필터 버튼 뱃지 카운트
+    // ==========================================
+    function updateBadges() {
+      const allCount = MOCK_TRASH_DATA.length;
+      const recycleCount = MOCK_TRASH_DATA.filter(i => i.type === 'recycle' || i.type === 'both').length;
+      const cigCount = MOCK_TRASH_DATA.filter(i => i.type === 'cigarette' || i.type === 'both').length;
+
+      document.getElementById('badge-all').textContent = allCount;
+      document.getElementById('badge-recycle').textContent = recycleCount;
+      document.getElementById('badge-cigarette').textContent = cigCount;
+    }
+
+    // ==========================================
+    // 13. 위치 권한 및 GPS 추적
+    // ==========================================
+    function requestLocation() {
+      const statusEl = document.getElementById('sub-status');
+      statusEl.textContent = "정밀 GPS 위치 측정 중...";
+
+      if (!navigator.geolocation) {
+        fallbackLocation("GPS를 지원하지 않는 브라우저입니다.");
+        return;
+      }
+
+      navigator.geolocation.getCurrentPosition(
+        (position) => {
+          userPos = {
+            lat: position.coords.latitude,
+            lng: position.coords.longitude
+          };
+          statusEl.textContent = "📍 현재 위치 기준 실시간 탐색됨";
+          renderUserMarker();
+          updateTrashMarkers();
+          map.panTo([userPos.lat, userPos.lng]);
+        },
+        (error) => {
+          let reason = "위치 권한 미허용";
+          if (error.code === error.PERMISSION_DENIED) reason = "위치 권한이 거부됨";
+          else if (error.code === error.TIMEOUT) reason = "위치 응답 시간 초과";
+          fallbackLocation(reason);
+        },
+        {
+          enableHighAccuracy: true,
+          timeout: 8000,
+          maximumAge: 5000
+        }
+      );
+    }
+
+    function fallbackLocation(reason) {
+      const statusEl = document.getElementById('sub-status');
+      statusEl.textContent = `📍 ${reason} (강남역 11번 출구 기본값)`;
+      userPos = { lat: DEFAULT_LOCATION.lat, lng: DEFAULT_LOCATION.lng };
+      renderUserMarker();
+      updateTrashMarkers();
+    }
+
+    // ==========================================
+    // 14. 이벤트 리스너 등록
+    // ==========================================
+    function setupEventListeners() {
+      // 필터 칩 클릭 이벤트
+      document.querySelectorAll('.filter-chip').forEach(btn => {
+        btn.addEventListener('click', (e) => {
+          const filter = btn.getAttribute('data-filter');
+          currentFilter = filter;
+
+          // UI 스타일 토글
+          document.querySelectorAll('.filter-chip').forEach(b => {
+            b.classList.remove('bg-gray-900', 'text-white');
+            b.classList.add('bg-white/90', 'text-gray-700');
+          });
+          btn.classList.remove('bg-white/90', 'text-gray-700');
+          btn.classList.add('bg-gray-900', 'text-white');
+
+          // 마커 및 바텀시트 다시 계산
+          selectedTrash = null;
+          updateTrashMarkers();
+
+          // 최근접 쓰레기통과 내 위치가 한 화면에 보이도록 조정
+          if (closestTrash) {
+            const bounds = L.latLngBounds([
+              [userPos.lat, userPos.lng],
+              [closestTrash.lat, closestTrash.lng]
+            ]);
+            map.fitBounds(bounds, { padding: [100, 50], maxZoom: 18 });
+          }
+        });
+      });
+
+      // 내 위치 재탐색 버튼
+      document.getElementById('btn-refresh').addEventListener('click', () => {
+        requestLocation();
+      });
+
+      // 내 위치 센터링 버튼 (FAB)
+      document.getElementById('btn-recenter').addEventListener('click', () => {
+        map.flyTo([userPos.lat, userPos.lng], 17, { duration: 0.6 });
+      });
+
+      // 경로 점선 표시 및 화면 포커싱
+      document.getElementById('btn-show-line').addEventListener('click', () => {
+        if (!selectedTrash) return;
+        drawGuidePolyline(selectedTrash);
+        const bounds = L.latLngBounds([
+          [userPos.lat, userPos.lng],
+          [selectedTrash.lat, selectedTrash.lng]
+        ]);
+        map.fitBounds(bounds, { padding: [120, 60], maxZoom: 18 });
+      });
+
+      // 길찾기 모달 열기/닫기
+      const navModal = document.getElementById('nav-modal');
+      document.getElementById('btn-navigate').addEventListener('click', () => {
+        navModal.classList.remove('hidden');
+        navModal.classList.add('flex');
+      });
+
+      document.getElementById('btn-close-modal').addEventListener('click', () => {
+        navModal.classList.add('hidden');
+        navModal.classList.remove('flex');
+      });
+
+      navModal.addEventListener('click', (e) => {
+        if (e.target === navModal) {
+          navModal.classList.add('hidden');
+          navModal.classList.remove('flex');
+        }
+      });
+    }
+
+    // ==========================================
+    // 15. 앱 구동
+    // ==========================================
+    window.addEventListener('DOMContentLoaded', () => {
+      initMap();
+      setupEventListeners();
+      requestLocation();
+    });
+  </script>
+</body>
+</html>
