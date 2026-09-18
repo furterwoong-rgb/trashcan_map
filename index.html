@@ -739,22 +739,28 @@
       // 지도앱이 100% 인식할 수 있도록 정밀 도로명 주소를 메인으로 지정
       const destTitle = item.addr ? `${item.addr} (${item.name})` : item.name;
       const encodedTitle = encodeURIComponent(destTitle);
+      const originTitle = encodeURIComponent('내 위치');
 
-      // 1. 카카오맵 공식 도보(FOOT) 길찾기
-      // 모바일에서는 kakaomap:// 앱 스키마의 by=FOOT으로 도보 탭을 즉시 활성화, PC에서는 target=walk 웹 URL로 안내
       const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
-      const kakaoAppScheme = `kakaomap://route?sp=${userPos.lat},${userPos.lng}&ep=${item.lat},${item.lng}&by=FOOT`;
-      const kakaoWebUrl = `https://map.kakao.com/?target=walk&sX=${userPos.lng}&sY=${userPos.lat}&sName=${encodeURIComponent('내 위치')}&eX=${item.lng}&eY=${item.lat}&eName=${encodedTitle}`;
-      
+
+      // 1. 카카오맵 공식 도보 길찾기
+      // 모바일: 카카오 공식 규격인 소문자 'by=foot'으로 앱 호출 시 즉시 도보 탭 활성화
+      // PC 웹: 출발지/도착지 좌표와 명칭, target=walk를 정규 순서로 명시하여 PC에서도 출발지 자동 채움 지원
       const linkKakao = document.getElementById('link-kakaomap');
-      linkKakao.href = isMobile ? kakaoAppScheme : kakaoWebUrl;
+      if (isMobile) {
+        linkKakao.href = `kakaomap://route?sp=${userPos.lat},${userPos.lng}&ep=${item.lat},${item.lng}&by=foot`;
+        linkKakao.removeAttribute('target'); // 앱 스키마 호출 시 불필요한 빈 새 탭 생성 방지
+      } else {
+        linkKakao.href = `https://map.kakao.com/?sName=${originTitle}&sX=${userPos.lng}&sY=${userPos.lat}&eName=${encodedTitle}&eX=${item.lng}&eY=${item.lat}&target=walk`;
+        linkKakao.setAttribute('target', '_blank');
+      }
 
       // 2. 네이버 지도 공식 directions v5 도보 길찾기
-      // 출발지를 '-'로 설정하여 앱/웹 자체 실시간 GPS에서 목적지 도로명주소/좌표로 도보(walk) 자동 탐색
-      const naverUrl = `https://map.naver.com/v5/directions/-/${item.lng},${item.lat},${encodedTitle}/-/walk`;
+      // 모바일 및 PC 웹 모두에서 출발지 좌표/명칭(${userPos.lng},${userPos.lat},내 위치)을 명시하여 PC 웹 빈칸 현상 해결
+      const naverUrl = `https://map.naver.com/v5/directions/${userPos.lng},${userPos.lat},${originTitle}/${item.lng},${item.lat},${encodedTitle}/-/walk`;
       document.getElementById('link-navermap').href = naverUrl;
 
-      // 3. 구글 지도 공식 도보 길찾기 (출발지 위경도 -> 도착지 위경도 좌표 1:1 매칭)
+      // 3. 구글 지도 공식 길찾기 (출발지 위경도 -> 도착지 위경도 좌표 1:1 매칭)
       const googleUrl = `https://www.google.com/maps/dir/?api=1&origin=${userPos.lat},${userPos.lng}&destination=${item.lat},${item.lng}&travelmode=walking`;
       document.getElementById('link-googlemap').href = googleUrl;
     }
