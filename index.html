@@ -438,10 +438,11 @@
         attributionControl: true
       });
 
-      L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', {
-        subdomains: 'abcd',
-        maxZoom: 20,
-        attribution: '&copy; <a href="https://carto.com/">CARTO</a> &copy; OpenStreetMap'
+      // 대한민국 국토교통부 VWorld 초고화질 타일 (API 키 워터마크 없음, 한국어 최적화)
+      L.tileLayer('https://xdworld.vworld.kr/2d/Base/service/{z}/{x}/{y}.png', {
+        maxZoom: 19,
+        minZoom: 6,
+        attribution: '&copy; VWorld 대한민국 공간정보'
       }).addTo(map);
 
       markerLayerGroup = L.layerGroup().addTo(map);
