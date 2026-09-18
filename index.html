@@ -323,6 +323,7 @@
     let currentFilter = 'all'; // 'all' | 'recycle' | 'cigarette'
     let selectedTrash = null;
     let closestTrash = null;
+    let trashList = []; // 서울시 3,740개 실제 데이터 저장
 
     let map = null;
     let userMarker = null;
@@ -330,133 +331,52 @@
     let guidePolyline = null;
 
     // ==========================================
-    // 2. 강남역 주변 더미 데이터 (15개)
+    // 2. 초기 안전 폴백 데이터 (강남역 15개)
     // ==========================================
-    const MOCK_TRASH_DATA = [
-      {
-        id: 1,
-        name: "강남역 11번 출구 계단 앞",
-        lat: 37.498320,
-        lng: 127.027740,
-        type: "both",
-        desc: "지하철역 출구 직진 방향, 일반 및 재활용 분리수거함"
-      },
-      {
-        id: 2,
-        name: "강남역 10번 출구 버스정류장",
-        lat: 37.498680,
-        lng: 127.027200,
-        type: "recycle",
-        desc: "광역버스 승강장 대기열 옆 일반/캔/페트 분리수거함"
-      },
-      {
-        id: 3,
-        name: "강남역 12번 출구 다이소 앞",
-        lat: 37.499050,
-        lng: 127.028750,
-        type: "both",
-        desc: "대로변 보행로 가로변 쓰레기통 및 담배꽁초 수거함"
-      },
-      {
-        id: 4,
-        name: "CGV 강남 뒤편 먹자골목 입구",
-        lat: 37.501300,
-        lng: 127.026850,
-        type: "cigarette",
-        desc: "음식점 골목 시작 지점 스마트 꽁초 전용 수거함"
-      },
-      {
-        id: 5,
-        name: "메가박스 강남 골목 공용 쉼터",
-        lat: 37.497550,
-        lng: 127.026400,
-        type: "both",
-        desc: "영화관 후문 보행로 벤치 옆 분리수거함"
-      },
-      {
-        id: 6,
-        name: "신논현역 6번 출구 교보타워 앞",
-        lat: 37.503650,
-        lng: 127.024950,
-        type: "recycle",
-        desc: "교보문고 앞 횡단보도 대기 구역 쓰레기통"
-      },
-      {
-        id: 7,
-        name: "강남역 1번 출구 테헤란로 방면",
-        lat: 37.497250,
-        lng: 127.028850,
-        type: "recycle",
-        desc: "금융센터 앞 보도블록 가로변 분리수거함"
-      },
-      {
-        id: 8,
-        name: "강남역 여삼빌딩 뒷골목 흡연구역",
-        lat: 37.499100,
-        lng: 127.029800,
-        type: "cigarette",
-        desc: "빌딩 후면 지정 흡연구역 내 대형 재떨이 수거함"
-      },
-      {
-        id: 9,
-        name: "신논현 먹자골목 사거리 쉼터",
-        lat: 37.502900,
-        lng: 127.027200,
-        type: "both",
-        desc: "보행자 전용도로 코너 클린스팟"
-      },
-      {
-        id: 10,
-        name: "강남역 9번 출구 부티크모나코 앞",
-        lat: 37.497900,
-        lng: 127.025400,
-        type: "recycle",
-        desc: "오피스 밀집 구역 캔/플라스틱 전용 쓰레기통"
-      },
-      {
-        id: 11,
-        name: "강남역 스파오(SPAO) 건물 앞",
-        lat: 37.499700,
-        lng: 127.026700,
-        type: "both",
-        desc: "강남대로 중심 쇼핑거리 보행로 쓰레기통"
-      },
-      {
-        id: 12,
-        name: "역삼1동 주민센터 인근 공원",
-        lat: 37.495800,
-        lng: 127.032100,
-        type: "both",
-        desc: "어린이공원 입구 재활용 분리수거대"
-      },
-      {
-        id: 13,
-        name: "강남역 우성아파트사거리 버스정류장",
-        lat: 37.492900,
-        lng: 127.029800,
-        type: "recycle",
-        desc: "중앙차로 버스정류소 일반/재활용 수거함"
-      },
-      {
-        id: 14,
-        name: "강남역 국기원입구 사거리 골목",
-        lat: 37.500500,
-        lng: 127.031500,
-        type: "cigarette",
-        desc: "카페 밀집구역 골목길 꽁초 전용 수거함"
-      },
-      {
-        id: 15,
-        name: "강남역 5번 출구 남부순환로 방면",
-        lat: 37.495200,
-        lng: 127.027900,
-        type: "both",
-        desc: "삼성전자 서초사옥 맞은편 보도 쓰레기통"
-      }
+    const FALLBACK_TRASH_DATA = [
+      { id: 1, name: "강남역 11번 출구 앞", gu: "강남구", addr: "서울특별시 강남구 강남대로 396", lat: 37.498320, lng: 127.027740, type: "both", desc: "지하철역 출구 직진 방향 수거함" },
+      { id: 2, name: "강남역 10번 출구 버스정류장", gu: "강남구", addr: "서울특별시 강남구 강남대로 398", lat: 37.498680, lng: 127.027200, type: "recycle", desc: "광역버스 승강장 대기열 옆 분리수거함" },
+      { id: 3, name: "강남역 12번 출구 다이소 앞", gu: "강남구", addr: "서울특별시 강남구 테헤란로 101", lat: 37.499050, lng: 127.028750, type: "both", desc: "대로변 보행로 가로변 수거함" },
+      { id: 4, name: "CGV 강남 뒤편 먹자골목", gu: "강남구", addr: "서울특별시 강남구 강남대로102길", lat: 37.501300, lng: 127.026850, type: "cigarette", desc: "음식점 골목 꽁초 전용 수거함" },
+      { id: 5, name: "메가박스 강남 골목 쉼터", gu: "서초구", addr: "서울특별시 서초구 서초대로77길", lat: 37.497550, lng: 127.026400, type: "both", desc: "영화관 후문 보행로 분리수거함" },
+      { id: 6, name: "신논현역 6번 출구 교보타워 앞", gu: "서초구", addr: "서울특별시 서초구 강남대로 465", lat: 37.503650, lng: 127.024950, type: "recycle", desc: "교보문고 앞 횡단보도 대기 구역" },
+      { id: 7, name: "강남역 1번 출구 테헤란로 방면", gu: "강남구", addr: "서울특별시 강남구 테헤란로 105", lat: 37.497250, lng: 127.028850, type: "recycle", desc: "금융센터 앞 보도블록 가로변" },
+      { id: 8, name: "강남역 여삼빌딩 뒷골목 흡연구역", gu: "강남구", addr: "서울특별시 강남구 테헤란로 111", lat: 37.499100, lng: 127.029800, type: "cigarette", desc: "빌딩 후면 대형 재떨이 수거함" },
+      { id: 9, name: "신논현 먹자골목 사거리 쉼터", gu: "강남구", addr: "서울특별시 강남구 봉은사로2길", lat: 37.502900, lng: 127.027200, type: "both", desc: "보행자 전용도로 클린스팟" },
+      { id: 10, name: "강남역 9번 출구 부티크모나코 앞", gu: "서초구", addr: "서울특별시 서초구 서초대로 397", lat: 37.497900, lng: 127.025400, type: "recycle", desc: "오피스 밀집 구역 분리수거함" },
+      { id: 11, name: "강남역 스파오(SPAO) 앞", gu: "강남구", addr: "서울특별시 강남구 강남대로 432", lat: 37.499700, lng: 127.026700, type: "both", desc: "쇼핑거리 보행로 쓰레기통" },
+      { id: 12, name: "역삼1동 주민센터 인근 공원", gu: "강남구", addr: "서울특별시 강남구 역삼로7길", lat: 37.495800, lng: 127.032100, type: "both", desc: "어린이공원 입구 재활용 분리수거대" },
+      { id: 13, name: "우성아파트사거리 정류장", gu: "서초구", addr: "서울특별시 서초구 강남대로 309", lat: 37.492900, lng: 127.029800, type: "recycle", desc: "중앙차로 버스정류소 수거함" },
+      { id: 14, name: "국기원입구 사거리 골목", gu: "강남구", addr: "서울특별시 강남구 테헤란로7길", lat: 37.500500, lng: 127.031500, type: "cigarette", desc: "카페 밀집구역 꽁초 전용 수거함" },
+      { id: 15, name: "강남역 5번 출구 삼성사옥 맞은편", gu: "서초구", addr: "서울특별시 서초구 사임당로", lat: 37.495200, lng: 127.027900, type: "both", desc: "서초사옥 맞은편 보도 쓰레기통" }
     ];
 
+    // 초기값은 폴백 데이터로 설정
+    trashList = [...FALLBACK_TRASH_DATA];
+
     // ==========================================
-    // 3. 거리 계산 (Haversine Formula) & 도보 시간
+    // 3. 서울시 최신 공공데이터 (3,740곳) 로드
+    // ==========================================
+    async function loadSeoulTrashData() {
+      try {
+        const res = await fetch('./seoul_trash_data.json');
+        if (!res.ok) throw new Error("데이터 로드 실패");
+        const data = await res.json();
+        if (Array.isArray(data) && data.length > 0) {
+          trashList = data;
+          console.log(`[쓱싹] 서울시 최신 공공데이터 ${trashList.length}곳 탑재 완료!`);
+          const statusEl = document.getElementById('sub-status');
+          statusEl.textContent = `📍 서울 전역 ${trashList.length.toLocaleString()}개 쓰레기통 연결됨`;
+          updateTrashMarkers();
+          updateBadges();
+        }
+      } catch (err) {
+        console.warn("[쓱싹] 외부 데이터 로드 실패, 기본 강남역 데이터 사용:", err);
+      }
+    }
+
+    // ==========================================
+    // 4. 거리 계산 (Haversine Formula) & 도보 시간
     // ==========================================
     function calculateDistance(lat1, lon1, lat2, lon2) {
       const R = 6371e3; // meters
@@ -487,7 +407,7 @@
     }
 
     // ==========================================
-    // 4. 지도 초기화 (CartoDB Positron: 미니멀 테마)
+    // 5. 지도 초기화 (CartoDB Positron: 미니멀 테마)
     // ==========================================
     function initMap() {
       map = L.map('map', {
@@ -497,7 +417,6 @@
         attributionControl: true
       });
 
-      // Toss / Karrot 스타일의 초미니멀 밝은 타일맵 (CartoDB Positron)
       L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', {
         subdomains: 'abcd',
         maxZoom: 20,
@@ -506,15 +425,17 @@
 
       markerLayerGroup = L.layerGroup().addTo(map);
 
-      // 내 위치 펄스 마커 렌더링
-      renderUserMarker();
+      // 지도 드래그/줌 종료 시 화면 내 마커 동적 갱신 (모바일 60fps 최적화)
+      map.on('moveend', () => {
+        renderVisibleMarkers();
+      });
 
-      // 쓰레기통 마커 및 초기 최근접 계산
+      renderUserMarker();
       updateTrashMarkers();
     }
 
     // ==========================================
-    // 5. 내 위치 펄스 마커
+    // 6. 내 위치 펄스 마커
     // ==========================================
     function renderUserMarker() {
       const pulseIcon = L.divIcon({
@@ -540,15 +461,14 @@
     }
 
     // ==========================================
-    // 6. 쓰레기통 커스텀 마커 생성
+    // 7. 쓰레기통 커스텀 마커 생성
     // ==========================================
     function getMarkerIcon(type, isClosest = false) {
-      let bgColor = "#3182F6"; // Toss Blue for recycle/both
+      let bgColor = "#3182F6"; // Toss Blue for recycle
       let iconSvg = "";
 
       if (type === 'cigarette') {
         bgColor = "#F97316"; // Orange
-        // Cigarette SVG
         iconSvg = `
           <svg class="w-4 h-4 text-white" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
             <path d="M18 12H2v4h16"/>
@@ -560,7 +480,6 @@
         `;
       } else if (type === 'recycle') {
         bgColor = "#3182F6"; // Blue
-        // Recycle Trash Icon
         iconSvg = `
           <svg class="w-4 h-4 text-white" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
             <path d="M3 6h18"/>
@@ -571,8 +490,7 @@
           </svg>
         `;
       } else {
-        // Both (일반 + 꽁초) - Emerald Teal
-        bgColor = "#10B981";
+        bgColor = "#10B981"; // Emerald
         iconSvg = `
           <svg class="w-4 h-4 text-white" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
             <path d="M3 6h18M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>
@@ -599,54 +517,91 @@
     }
 
     // ==========================================
-    // 7. 쓰레기통 마커 갱신 및 최근접 탐색
+    // 8. 최근접 쓰레기통 탐색 및 마커 렌더링
     // ==========================================
-    function updateTrashMarkers() {
-      markerLayerGroup.clearLayers();
+    let cachedFilteredItems = [];
 
-      // 필터링 적용
-      const filtered = MOCK_TRASH_DATA.filter(item => {
+    function updateTrashMarkers() {
+      // 1. 카테고리 필터링
+      const filtered = trashList.filter(item => {
         if (currentFilter === 'all') return true;
         if (currentFilter === 'recycle') return item.type === 'recycle' || item.type === 'both';
         if (currentFilter === 'cigarette') return item.type === 'cigarette' || item.type === 'both';
         return true;
       });
 
-      // 각 항목과 현재 위치 간의 거리 계산
-      const itemsWithDistance = filtered.map(item => ({
-        ...item,
-        distance: calculateDistance(userPos.lat, userPos.lng, item.lat, item.lng)
-      })).sort((a, b) => a.distance - b.distance);
+      if (filtered.length === 0) return;
 
-      // 뱃지 개수 업데이트
-      updateBadges();
+      // 2. 전체 데이터 중 최근접 쓰레기통 계산 (1ms 소요)
+      let minDistance = Infinity;
+      let nearest = null;
 
-      if (itemsWithDistance.length === 0) return;
+      for (let i = 0; i < filtered.length; i++) {
+        const item = filtered[i];
+        const dist = calculateDistance(userPos.lat, userPos.lng, item.lat, item.lng);
+        item.distance = dist;
+        if (dist < minDistance) {
+          minDistance = dist;
+          nearest = item;
+        }
+      }
 
-      // 가장 가까운 쓰레기통
-      closestTrash = itemsWithDistance[0];
+      closestTrash = nearest;
+      cachedFilteredItems = filtered;
 
-      // 현재 선택된 쓰레기통이 없거나 필터에서 빠졌으면 가장 가까운 것으로 설정
       if (!selectedTrash || !filtered.some(f => f.id === selectedTrash.id)) {
         selectedTrash = closestTrash;
       } else {
-        // 거리 갱신
-        selectedTrash = itemsWithDistance.find(it => it.id === selectedTrash.id) || closestTrash;
+        selectedTrash = filtered.find(it => it.id === selectedTrash.id) || closestTrash;
       }
 
-      // 마커 생성 및 지도에 추가
-      itemsWithDistance.forEach(item => {
-        const isClosest = (item.id === closestTrash.id);
-        const marker = L.marker([item.lat, item.lng], {
-          icon: getMarkerIcon(item.type, isClosest)
-        });
+      // 3. 화면 내 마커만 렌더링 (모바일 최적화)
+      renderVisibleMarkers();
 
-        marker.on('click', () => {
-          selectTrashItem(item);
-        });
+      // 4. 바텀 시트 및 안내선 업데이트
+      updateBottomSheet(selectedTrash);
+      drawGuidePolyline(selectedTrash);
+    }
 
-        markerLayerGroup.addLayer(marker);
-      });
+    // 화면 뷰포트 + 내 주변 반경 내의 마커만 지도에 표시 (메모리 절약 및 부드러운 스크롤)
+    function renderVisibleMarkers() {
+      if (!map || cachedFilteredItems.length === 0) return;
+
+      markerLayerGroup.clearLayers();
+
+      const bounds = map.getBounds().pad(0.3); // 화면 밖 30% 여유 영역까지 렌더링
+      let renderedCount = 0;
+      const MAX_VISIBLE_MARKERS = 180; // 최대 렌더링 제한으로 성능 보장
+
+      // 가장 가까운 마커 및 선택된 마커는 무조건 렌더링
+      const mustRenderIds = new Set();
+      if (closestTrash) mustRenderIds.add(closestTrash.id);
+      if (selectedTrash) mustRenderIds.add(selectedTrash.id);
+
+      // 뷰포트 내 항목 필터
+      for (let i = 0; i < cachedFilteredItems.length; i++) {
+        const item = cachedFilteredItems[i];
+        const latLng = L.latLng(item.lat, item.lng);
+
+        const isMust = mustRenderIds.has(item.id);
+        const inView = bounds.contains(latLng);
+
+        if (isMust || (inView && renderedCount < MAX_VISIBLE_MARKERS)) {
+          const isClosest = closestTrash && (item.id === closestTrash.id);
+          const marker = L.marker([item.lat, item.lng], {
+            icon: getMarkerIcon(item.type, isClosest),
+            zIndexOffset: isClosest ? 500 : 100
+          });
+
+          marker.on('click', () => {
+            selectTrashItem(item);
+          });
+
+          markerLayerGroup.addLayer(marker);
+          renderedCount++;
+        }
+      }
+    }
 
       // 바텀 시트 업데이트 & 점선 그리기
       updateBottomSheet(selectedTrash);
@@ -755,13 +710,13 @@
     // 12. 필터 버튼 뱃지 카운트
     // ==========================================
     function updateBadges() {
-      const allCount = MOCK_TRASH_DATA.length;
-      const recycleCount = MOCK_TRASH_DATA.filter(i => i.type === 'recycle' || i.type === 'both').length;
-      const cigCount = MOCK_TRASH_DATA.filter(i => i.type === 'cigarette' || i.type === 'both').length;
+      const allCount = trashList.length;
+      const recycleCount = trashList.filter(i => i.type === 'recycle' || i.type === 'both').length;
+      const cigCount = trashList.filter(i => i.type === 'cigarette' || i.type === 'both').length;
 
-      document.getElementById('badge-all').textContent = allCount;
-      document.getElementById('badge-recycle').textContent = recycleCount;
-      document.getElementById('badge-cigarette').textContent = cigCount;
+      document.getElementById('badge-all').textContent = allCount.toLocaleString();
+      document.getElementById('badge-recycle').textContent = recycleCount.toLocaleString();
+      document.getElementById('badge-cigarette').textContent = cigCount.toLocaleString();
     }
 
     // ==========================================
@@ -890,6 +845,7 @@
       initMap();
       setupEventListeners();
       requestLocation();
+      loadSeoulTrashData();
     });
   </script>
 </body>
