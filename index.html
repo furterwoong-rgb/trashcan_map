@@ -385,9 +385,9 @@
         const data = await res.json();
         if (Array.isArray(data) && data.length > 0) {
           trashList = data;
-          console.log(`[쓱싹] 서울시 최신 공공데이터 ${trashList.length}곳 탑재 완료!`);
+          console.log(`[쓱싹] 전국 최신 공공데이터 ${trashList.length}곳 탑재 완료!`);
           const statusEl = document.getElementById('sub-status');
-          statusEl.textContent = `📍 서울 전역 ${trashList.length.toLocaleString()}개 쓰레기통 연결됨`;
+          statusEl.textContent = `📍 전국 ${trashList.length.toLocaleString()}개 쓰레기통 연결됨`;
           updateTrashMarkers();
           updateBadges();
         }
