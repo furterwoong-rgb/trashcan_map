@@ -245,20 +245,20 @@
               </span>
             </div>
             <h2 id="sheet-title" class="text-lg font-bold text-gray-900 truncate leading-snug">
-              강남역 11번 출구 앞
+              가까운 쓰레기통 탐색 중...
             </h2>
             <p id="sheet-desc" class="text-xs text-gray-500 truncate mt-0.5">
-              지하철 출구 바로 앞 공공 수거함
+              위치 정보를 기반으로 가장 가까운 곳을 안내합니다.
             </p>
           </div>
 
           <!-- Distance & ETA Highlight Badge -->
           <div class="text-right flex-shrink-0 bg-blue-50/80 border border-blue-100 rounded-2xl px-3 py-2">
             <div id="sheet-distance" class="text-base font-extrabold text-brand-600 leading-none">
-              45m
+              --
             </div>
             <div id="sheet-walk-time" class="text-[11px] font-semibold text-brand-500 mt-1 leading-none">
-              도보 1분
+              탐색 중
             </div>
           </div>
         </div>
@@ -285,6 +285,38 @@
           </button>
         </div>
 
+      </div>
+    </div>
+  </div>
+
+  <!-- Location Permission Modal (접속 시마다 위치 확인 여부 질문) -->
+  <div id="location-modal" class="fixed inset-0 z-50 bg-black/40 backdrop-blur-sm hidden items-end sm:items-center justify-center p-4">
+    <div class="bg-white rounded-3xl max-w-sm w-full p-6 shadow-2xl space-y-4 transform transition-all">
+      <div class="flex items-center justify-between">
+        <div class="w-10 h-10 rounded-2xl bg-brand-50 flex items-center justify-center text-brand-500 text-xl font-bold">
+          📍
+        </div>
+        <button id="btn-close-location-modal" class="text-gray-400 hover:text-gray-600 p-1">
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+          </svg>
+        </button>
+      </div>
+
+      <div class="space-y-1">
+        <h3 class="text-lg font-bold text-gray-900 tracking-tight">내 주변 쓰레기통을 찾을까요?</h3>
+        <p class="text-xs text-gray-500 leading-relaxed">
+          현재 계신 위치를 기준으로 가장 가까운 쓰레기통까지의 거리와 도보 길안내를 제공해 드립니다.
+        </p>
+      </div>
+
+      <div class="space-y-2 pt-2">
+        <button id="btn-allow-location" class="w-full py-3.5 px-4 rounded-2xl bg-brand-500 hover:bg-brand-600 active:scale-[0.98] text-white font-bold text-sm shadow-md shadow-brand-500/20 transition-all flex items-center justify-center gap-2">
+          <span>📍 내 위치로 찾기 (허용)</span>
+        </button>
+        <button id="btn-skip-location" class="w-full py-3 px-4 rounded-2xl bg-gray-100 hover:bg-gray-200 active:scale-[0.98] text-gray-600 font-semibold text-xs transition-all">
+          기본 위치로 둘러보기
+        </button>
       </div>
     </div>
   </div>
@@ -333,18 +365,19 @@
     // ==========================================
     // 1. 상태 및 상수 정의
     // ==========================================
-    // Fallback 위치: 강남역 11번 출구
+    // 위치 권한 미허용 시 서울 중심(시청/광화문) 기준 폴백
     const DEFAULT_LOCATION = {
-      lat: 37.498085,
-      lng: 127.027978,
-      name: "강남역 11번 출구 (기본 위치)"
+      lat: 37.566535,
+      lng: 126.977969,
+      name: "서울시청 (기본 위치)"
     };
 
     let userPos = { lat: DEFAULT_LOCATION.lat, lng: DEFAULT_LOCATION.lng };
     let currentFilter = 'all'; // 'all' | 'recycle' | 'cigarette'
     let selectedTrash = null;
     let closestTrash = null;
-    let trashList = []; // 서울시 3,740개 실제 데이터 저장
+    let trashList = []; // 전국 최신 공공데이터 저장
+    let userManuallySelected = false; // 사용자가 직접 마커를 콕 집어 클릭했는지 여부
 
     let map = null;
     let userMarker = null;
@@ -352,31 +385,7 @@
     let guidePolyline = null;
 
     // ==========================================
-    // 2. 초기 안전 폴백 데이터 (강남역 15개)
-    // ==========================================
-    const FALLBACK_TRASH_DATA = [
-      { id: 1, name: "강남역 11번 출구 앞", gu: "강남구", addr: "서울특별시 강남구 강남대로 396", lat: 37.498320, lng: 127.027740, type: "both", desc: "지하철역 출구 직진 방향 수거함" },
-      { id: 2, name: "강남역 10번 출구 버스정류장", gu: "강남구", addr: "서울특별시 강남구 강남대로 398", lat: 37.498680, lng: 127.027200, type: "recycle", desc: "광역버스 승강장 대기열 옆 분리수거함" },
-      { id: 3, name: "강남역 12번 출구 다이소 앞", gu: "강남구", addr: "서울특별시 강남구 테헤란로 101", lat: 37.499050, lng: 127.028750, type: "both", desc: "대로변 보행로 가로변 수거함" },
-      { id: 4, name: "CGV 강남 뒤편 먹자골목", gu: "강남구", addr: "서울특별시 강남구 강남대로102길", lat: 37.501300, lng: 127.026850, type: "cigarette", desc: "음식점 골목 꽁초 전용 수거함" },
-      { id: 5, name: "메가박스 강남 골목 쉼터", gu: "서초구", addr: "서울특별시 서초구 서초대로77길", lat: 37.497550, lng: 127.026400, type: "both", desc: "영화관 후문 보행로 분리수거함" },
-      { id: 6, name: "신논현역 6번 출구 교보타워 앞", gu: "서초구", addr: "서울특별시 서초구 강남대로 465", lat: 37.503650, lng: 127.024950, type: "recycle", desc: "교보문고 앞 횡단보도 대기 구역" },
-      { id: 7, name: "강남역 1번 출구 테헤란로 방면", gu: "강남구", addr: "서울특별시 강남구 테헤란로 105", lat: 37.497250, lng: 127.028850, type: "recycle", desc: "금융센터 앞 보도블록 가로변" },
-      { id: 8, name: "강남역 여삼빌딩 뒷골목 흡연구역", gu: "강남구", addr: "서울특별시 강남구 테헤란로 111", lat: 37.499100, lng: 127.029800, type: "cigarette", desc: "빌딩 후면 대형 재떨이 수거함" },
-      { id: 9, name: "신논현 먹자골목 사거리 쉼터", gu: "강남구", addr: "서울특별시 강남구 봉은사로2길", lat: 37.502900, lng: 127.027200, type: "both", desc: "보행자 전용도로 클린스팟" },
-      { id: 10, name: "강남역 9번 출구 부티크모나코 앞", gu: "서초구", addr: "서울특별시 서초구 서초대로 397", lat: 37.497900, lng: 127.025400, type: "recycle", desc: "오피스 밀집 구역 분리수거함" },
-      { id: 11, name: "강남역 스파오(SPAO) 앞", gu: "강남구", addr: "서울특별시 강남구 강남대로 432", lat: 37.499700, lng: 127.026700, type: "both", desc: "쇼핑거리 보행로 쓰레기통" },
-      { id: 12, name: "역삼1동 주민센터 인근 공원", gu: "강남구", addr: "서울특별시 강남구 역삼로7길", lat: 37.495800, lng: 127.032100, type: "both", desc: "어린이공원 입구 재활용 분리수거대" },
-      { id: 13, name: "우성아파트사거리 정류장", gu: "서초구", addr: "서울특별시 서초구 강남대로 309", lat: 37.492900, lng: 127.029800, type: "recycle", desc: "중앙차로 버스정류소 수거함" },
-      { id: 14, name: "국기원입구 사거리 골목", gu: "강남구", addr: "서울특별시 강남구 테헤란로7길", lat: 37.500500, lng: 127.031500, type: "cigarette", desc: "카페 밀집구역 꽁초 전용 수거함" },
-      { id: 15, name: "강남역 5번 출구 삼성사옥 맞은편", gu: "서초구", addr: "서울특별시 서초구 사임당로", lat: 37.495200, lng: 127.027900, type: "both", desc: "서초사옥 맞은편 보도 쓰레기통" }
-    ];
-
-    // 초기값은 폴백 데이터로 설정
-    trashList = [...FALLBACK_TRASH_DATA];
-
-    // ==========================================
-    // 3. 서울시 최신 공공데이터 (3,740곳) 로드
+    // 2. 전국 최신 공공데이터 로드
     // ==========================================
     async function loadSeoulTrashData() {
       try {
@@ -388,11 +397,12 @@
           console.log(`[쓱싹] 전국 최신 공공데이터 ${trashList.length}곳 탑재 완료!`);
           const statusEl = document.getElementById('sub-status');
           statusEl.textContent = `📍 전국 ${trashList.length.toLocaleString()}개 쓰레기통 연결됨`;
+          userManuallySelected = false;
           updateTrashMarkers();
           updateBadges();
         }
       } catch (err) {
-        console.warn("[쓱싹] 외부 데이터 로드 실패, 기본 강남역 데이터 사용:", err);
+        console.warn("[쓱싹] 외부 데이터 로드 실패:", err);
       }
     }
 
@@ -581,8 +591,10 @@
       closestTrash = nearest;
       cachedFilteredItems = filtered;
 
-      if (!selectedTrash || !filtered.some(f => f.id === selectedTrash.id)) {
+      // 사용자가 직접 지도에서 특정 마커를 클릭한 것이 아니라면, 항상 직선거리 최근접 쓰레기통을 1순위 추천
+      if (!userManuallySelected || !selectedTrash || !filtered.some(f => f.id === selectedTrash.id)) {
         selectedTrash = closestTrash;
+        userManuallySelected = false;
       } else {
         selectedTrash = filtered.find(it => it.id === selectedTrash.id) || closestTrash;
       }
@@ -663,6 +675,7 @@
     // 9. 특정 쓰레기통 선택 시 UI 및 지도 이동
     // ==========================================
     function selectTrashItem(item) {
+      userManuallySelected = true;
       selectedTrash = item;
       updateBottomSheet(item);
       drawGuidePolyline(item);
@@ -768,9 +781,20 @@
             lng: position.coords.longitude
           };
           statusEl.textContent = "📍 현재 위치 기준 실시간 탐색됨";
+          userManuallySelected = false;
           renderUserMarker();
           updateTrashMarkers();
-          map.panTo([userPos.lat, userPos.lng]);
+
+          // 내 위치와 가장 가까운 쓰레기통을 한 화면에 자연스럽게 표시
+          if (closestTrash) {
+            const bounds = L.latLngBounds([
+              [userPos.lat, userPos.lng],
+              [closestTrash.lat, closestTrash.lng]
+            ]);
+            map.fitBounds(bounds, { padding: [120, 60], maxZoom: 18 });
+          } else {
+            map.panTo([userPos.lat, userPos.lng]);
+          }
         },
         (error) => {
           let reason = "위치 권한 미허용";
@@ -788,10 +812,12 @@
 
     function fallbackLocation(reason) {
       const statusEl = document.getElementById('sub-status');
-      statusEl.textContent = `📍 ${reason} (강남역 11번 출구 기본값)`;
+      statusEl.textContent = `📍 ${reason} (${DEFAULT_LOCATION.name})`;
       userPos = { lat: DEFAULT_LOCATION.lat, lng: DEFAULT_LOCATION.lng };
+      userManuallySelected = false;
       renderUserMarker();
       updateTrashMarkers();
+      map.panTo([userPos.lat, userPos.lng]);
     }
 
     // ==========================================
@@ -803,6 +829,7 @@
         btn.addEventListener('click', (e) => {
           const filter = btn.getAttribute('data-filter');
           currentFilter = filter;
+          userManuallySelected = false;
 
           // UI 스타일 토글
           document.querySelectorAll('.filter-chip').forEach(b => {
@@ -829,6 +856,7 @@
 
       // 내 위치 재탐색 버튼
       document.getElementById('btn-refresh').addEventListener('click', () => {
+        userManuallySelected = false;
         requestLocation();
       });
 
@@ -846,6 +874,44 @@
           [selectedTrash.lat, selectedTrash.lng]
         ]);
         map.fitBounds(bounds, { padding: [120, 60], maxZoom: 18 });
+      });
+
+      // 위치 권한 모달 열기/닫기 및 이벤트
+      const locationModal = document.getElementById('location-modal');
+      const btnAllowLocation = document.getElementById('btn-allow-location');
+      const btnSkipLocation = document.getElementById('btn-skip-location');
+      const btnCloseLocationModal = document.getElementById('btn-close-location-modal');
+
+      function showLocationModal() {
+        locationModal.classList.remove('hidden');
+        locationModal.classList.add('flex');
+      }
+
+      function hideLocationModal() {
+        locationModal.classList.add('hidden');
+        locationModal.classList.remove('flex');
+      }
+
+      btnAllowLocation.addEventListener('click', () => {
+        hideLocationModal();
+        requestLocation();
+      });
+
+      btnSkipLocation.addEventListener('click', () => {
+        hideLocationModal();
+        fallbackLocation("기본 위치 둘러보기");
+      });
+
+      btnCloseLocationModal.addEventListener('click', () => {
+        hideLocationModal();
+        fallbackLocation("기본 위치 둘러보기");
+      });
+
+      locationModal.addEventListener('click', (e) => {
+        if (e.target === locationModal) {
+          hideLocationModal();
+          fallbackLocation("기본 위치 둘러보기");
+        }
       });
 
       // 길찾기 모달 열기/닫기
@@ -874,8 +940,12 @@
     window.addEventListener('DOMContentLoaded', () => {
       initMap();
       setupEventListeners();
-      requestLocation();
       loadSeoulTrashData();
+      
+      // 웹사이트 진입 시 항상 위치 사용 여부를 묻는 모달 팝업 표시
+      const locationModal = document.getElementById('location-modal');
+      locationModal.classList.remove('hidden');
+      locationModal.classList.add('flex');
     });
   </script>
 </body>
