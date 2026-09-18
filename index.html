@@ -751,9 +751,9 @@
         linkKakao.href = `kakaomap://route?sp=${userPos.lat},${userPos.lng}&ep=${item.lat},${item.lng}&by=foot`;
         linkKakao.removeAttribute('target'); // 앱 스키마 호출 시 불필요한 빈 새 탭 생성 방지
       } else {
-        // PC 웹: 카카오맵 공식 표준 길찾기 패턴 (/link/from/.../to/.../walk)
-        // 출발지 위경도와 도착지 위경도를 정확히 분리 전달하여 동일 장소 오인식 버그 완전 해결
-        linkKakao.href = `https://map.kakao.com/link/from/${originTitle},${userPos.lat},${userPos.lng}/to/${encodedTitle},${item.lat},${item.lng}/walk`;
+        // PC 웹: 카카오맵 공식 도보 길찾기 패턴 (/link/by/walk/...)
+        // 카카오 서버 리다이렉트 시 한글 깨짐(? 표시) 문제를 완벽히 해결하고 도보(walk) 경로로 출발지와 목적지 자동 연동
+        linkKakao.href = `https://map.kakao.com/link/by/walk/${originTitle},${userPos.lat},${userPos.lng}/${encodedTitle},${item.lat},${item.lng}`;
         linkKakao.setAttribute('target', '_blank');
       }
 
