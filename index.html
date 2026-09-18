@@ -353,7 +353,10 @@
         <a id="link-googlemap" target="_blank" class="flex items-center justify-between p-3.5 rounded-2xl bg-blue-50 hover:bg-blue-100/80 border border-blue-200/70 text-blue-950 font-semibold text-sm transition-all">
           <div class="flex items-center gap-2.5">
             <span class="w-6 h-6 rounded-lg bg-[#4285F4] text-white font-black flex items-center justify-center text-xs shadow-sm">G</span>
-            <span>구글 지도로 길찾기</span>
+            <div class="flex flex-col text-left">
+              <span>구글 지도로 길찾기</span>
+              <span class="text-[10px] text-blue-600/80 font-normal">국내 법률상 도보 미지원(대중교통/위치)</span>
+            </div>
           </div>
           <span class="text-xs text-blue-800">열기 &rarr;</span>
         </a>
@@ -737,10 +740,14 @@
       const destTitle = item.addr ? `${item.addr} (${item.name})` : item.name;
       const encodedTitle = encodeURIComponent(destTitle);
 
-      // 1. 카카오맵 공식 표준 길찾기 딥링크 (내 현재 위치 -> 도착지 도로명주소/좌표)
-      // 모바일 카카오맵 앱 및 웹 공통으로 출발지 충돌 없이 원클릭 도보 안내 지원
-      const kakaoUrl = `https://map.kakao.com/link/to/${encodedTitle},${item.lat},${item.lng}`;
-      document.getElementById('link-kakaomap').href = kakaoUrl;
+      // 1. 카카오맵 공식 도보(FOOT) 길찾기
+      // 모바일에서는 kakaomap:// 앱 스키마의 by=FOOT으로 도보 탭을 즉시 활성화, PC에서는 target=walk 웹 URL로 안내
+      const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+      const kakaoAppScheme = `kakaomap://route?sp=${userPos.lat},${userPos.lng}&ep=${item.lat},${item.lng}&by=FOOT`;
+      const kakaoWebUrl = `https://map.kakao.com/?target=walk&sX=${userPos.lng}&sY=${userPos.lat}&sName=${encodeURIComponent('내 위치')}&eX=${item.lng}&eY=${item.lat}&eName=${encodedTitle}`;
+      
+      const linkKakao = document.getElementById('link-kakaomap');
+      linkKakao.href = isMobile ? kakaoAppScheme : kakaoWebUrl;
 
       // 2. 네이버 지도 공식 directions v5 도보 길찾기
       // 출발지를 '-'로 설정하여 앱/웹 자체 실시간 GPS에서 목적지 도로명주소/좌표로 도보(walk) 자동 탐색
