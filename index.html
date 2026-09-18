@@ -47,11 +47,6 @@
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin=""/>
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
 
-  <!-- MapLibre GL Vector Map (SVG/WebGL 무손실 벡터 타일 렌더러) -->
-  <link href="https://unpkg.com/maplibre-gl@3.6.2/dist/maplibre-gl.css" rel="stylesheet" />
-  <script src="https://unpkg.com/maplibre-gl@3.6.2/dist/maplibre-gl.js"></script>
-  <script src="https://unpkg.com/@maplibre/maplibre-gl-leaflet@0.0.21/leaflet-maplibre-gl.js"></script>
-
   <style>
     /* iOS Safari Full Screen Fix & Clean Touch */
     html, body {
@@ -443,20 +438,13 @@
         attributionControl: true
       });
 
-      // 100% 무손실 벡터(SVG/WebGL) 지도 타일 - 스마트폰 레티나 고해상도에서 글씨/도로가 칼같이 선명함
-      try {
-        L.maplibreGL({
-          style: 'https://tiles.openfreemap.org/styles/positron',
-          attribution: '&copy; OpenFreeMap &copy; OpenStreetMap'
-        }).addTo(map);
-      } catch (err) {
-        console.warn("벡터 타일 로드 실패, 백업 래스터 타일 사용:", err);
-        L.tileLayer('https://xdworld.vworld.kr/2d/Base/service/{z}/{x}/{y}.png', {
-          maxZoom: 19,
-          minZoom: 6,
-          attribution: '&copy; VWorld'
-        }).addTo(map);
-      }
+      // 대한민국 국토교통부 VWorld 고해상도 공식 타일 (maxZoom 21로 깊은 확대 지원)
+      L.tileLayer('https://xdworld.vworld.kr/2d/Base/service/{z}/{x}/{y}.png', {
+        minZoom: 6,
+        maxNativeZoom: 19,
+        maxZoom: 21,
+        attribution: '&copy; VWorld 대한민국 국가공간정보'
+      }).addTo(map);
 
       markerLayerGroup = L.layerGroup().addTo(map);
 
