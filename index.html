@@ -60,9 +60,8 @@
     }
   </script>
 
-  <!-- Leaflet CSS & JS -->
-  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin=""/>
-  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+  <!-- Kakao Maps Web API SDK (HD Retina Native Support) -->
+  <script type="text/javascript" src="https://dapi.kakao.com/v2/maps/sdk.js?appkey=a08f106e95ab88ee226c2afbb77588ff&libraries=clusterer&autoload=false"></script>
 
   <style>
     /* iOS Safari Full Screen Fix & Clean Touch */
@@ -88,32 +87,10 @@
       background-color: #f8fafc;
     }
 
-    /* CRITICAL FIX: Tailwind CSS vs Leaflet Tile Conflict */
-    .leaflet-container img {
+    /* Tailwind CSS vs Kakao Maps Tile & Custom Overlay Image Conflict Fix */
+    #map img {
       max-width: none !important;
       max-height: none !important;
-    }
-    .leaflet-tile {
-      visibility: inherit !important;
-    }
-    .leaflet-pane {
-      z-index: 10 !important;
-    }
-    .leaflet-top, .leaflet-bottom {
-      z-index: 15 !important;
-    }
-
-    /* Hide Leaflet Default Control Clutter */
-    .leaflet-control-attribution {
-      font-size: 9px !important;
-      background: rgba(255, 255, 255, 0.7) !important;
-      backdrop-filter: blur(4px);
-      margin: 0 !important;
-      padding: 2px 6px !important;
-      border-top-left-radius: 6px;
-    }
-    .leaflet-top.leaflet-left, .leaflet-bottom.leaflet-left {
-      display: none;
     }
 
     /* Marker Pulse Animation */
@@ -409,8 +386,8 @@
     let userManuallySelected = false; // 사용자가 직접 마커를 콕 집어 클릭했는지 여부
 
     let map = null;
-    let userMarker = null;
-    let markerLayerGroup = null;
+    let userOverlay = null;
+    let visibleOverlays = [];
     let guidePolyline = null;
 
     // ==========================================
@@ -467,78 +444,79 @@
     }
 
     // ==========================================
-    // 5. 지도 초기화 (CartoDB Positron: 미니멀 테마)
+    // ==========================================
+    // 5. 지도 초기화 (카카오 지도 Web API HD 엔진)
     // ==========================================
     function initMap() {
-      map = L.map('map', {
-        center: [userPos.lat, userPos.lng],
-        zoom: 17,
-        zoomControl: false,
-        attributionControl: true
+      if (typeof kakao === 'undefined' || !kakao.maps) {
+        console.error('[쓱싹] 카카오 지도 SDK가 아직 로드되지 않았습니다.');
+        return;
+      }
+
+      kakao.maps.load(() => {
+        const container = document.getElementById('map');
+        const options = {
+          center: new kakao.maps.LatLng(userPos.lat, userPos.lng),
+          level: 4 // 도보 탐색에 최적화된 확대 수준
+        };
+        map = new kakao.maps.Map(container, options);
+
+        // 브라우저 렌더링 후 레이아웃 재계산 (모바일 회색 화면 방지)
+        setTimeout(() => {
+          if (map) map.relayout();
+        }, 150);
+
+        window.addEventListener('resize', () => {
+          if (map) map.relayout();
+        });
+
+        // 지도 드래그 및 줌 완료 시 뷰포트 내 마커 동적 갱신
+        kakao.maps.event.addListener(map, 'idle', () => {
+          renderVisibleMarkers();
+        });
+
+        renderUserMarker();
+        updateTrashMarkers();
       });
-
-      // 대한민국 국토교통부 VWorld 고해상도 공식 타일 (maxZoom 21로 깊은 확대 지원)
-      L.tileLayer('https://xdworld.vworld.kr/2d/Base/service/{z}/{x}/{y}.png', {
-        minZoom: 6,
-        maxNativeZoom: 19,
-        maxZoom: 21,
-        attribution: '&copy; VWorld 대한민국 국가공간정보'
-      }).addTo(map);
-
-      markerLayerGroup = L.layerGroup().addTo(map);
-
-      // 브라우저 렌더링 후 지도 컨테이너 크기 재계산 (회색 화면 방지)
-      setTimeout(() => {
-        if (map) map.invalidateSize();
-      }, 150);
-
-      window.addEventListener('resize', () => {
-        if (map) map.invalidateSize();
-      });
-
-      // 지도 드래그/줌 종료 시 화면 내 마커 동적 갱신 (모바일 60fps 최적화)
-      map.on('moveend', () => {
-        renderVisibleMarkers();
-      });
-
-      renderUserMarker();
-      updateTrashMarkers();
     }
 
     // ==========================================
-    // 6. 내 위치 펄스 마커
+    // 6. 내 위치 펄스 마커 (카카오 CustomOverlay)
     // ==========================================
     function renderUserMarker() {
-      const pulseIcon = L.divIcon({
-        className: 'custom-pulse-marker',
-        html: `
+      if (!map) return;
+      const pos = new kakao.maps.LatLng(userPos.lat, userPos.lng);
+
+      if (userOverlay) {
+        userOverlay.setPosition(pos);
+      } else {
+        const pulseEl = document.createElement('div');
+        pulseEl.className = 'custom-pulse-marker';
+        pulseEl.innerHTML = `
           <div class="pulse-dot-container">
             <div class="pulse-ring"></div>
             <div class="pulse-core"></div>
           </div>
-        `,
-        iconSize: [28, 28],
-        iconAnchor: [14, 14]
-      });
-
-      if (userMarker) {
-        userMarker.setLatLng([userPos.lat, userPos.lng]);
-      } else {
-        userMarker = L.marker([userPos.lat, userPos.lng], {
-          icon: pulseIcon,
-          zIndexOffset: 1000
-        }).addTo(map);
+        `;
+        userOverlay = new kakao.maps.CustomOverlay({
+          map: map,
+          position: pos,
+          content: pulseEl,
+          xAnchor: 0.5,
+          yAnchor: 0.5,
+          zIndex: 1000
+        });
       }
     }
 
     // ==========================================
-    // 7. 쓰레기통 커스텀 마커 생성
+    // 7. 쓰레기통 커스텀 마커 엘리먼트 생성
     // ==========================================
-    function getMarkerIcon(type, isClosest = false) {
+    function createMarkerElement(item, isClosest = false) {
       let bgColor = "#3182F6"; // Toss Blue for recycle
       let iconSvg = "";
 
-      if (type === 'cigarette') {
+      if (item.type === 'cigarette') {
         bgColor = "#F97316"; // Orange
         iconSvg = `
           <svg class="w-4 h-4 text-white" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
@@ -549,7 +527,7 @@
             <path d="M22 8c0-2.5-2-2.5-2-5"/>
           </svg>
         `;
-      } else if (type === 'recycle') {
+      } else if (item.type === 'recycle') {
         bgColor = "#3182F6"; // Blue
         iconSvg = `
           <svg class="w-4 h-4 text-white" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
@@ -572,19 +550,22 @@
 
       const ringClass = isClosest ? "ring-4 ring-brand-500/40 animate-bounce" : "";
 
-      return L.divIcon({
-        className: 'custom-trash-icon',
-        html: `
-          <div class="trash-pin relative flex flex-col items-center cursor-pointer">
-            <div class="w-8 h-8 rounded-full shadow-lg flex items-center justify-center ${ringClass}" style="background-color: ${bgColor};">
-              ${iconSvg}
-            </div>
-            <div class="w-2 h-2 rotate-45 -mt-1 shadow-sm" style="background-color: ${bgColor};"></div>
-          </div>
-        `,
-        iconSize: [32, 36],
-        iconAnchor: [16, 34]
+      const el = document.createElement('div');
+      el.className = 'trash-pin relative flex flex-col items-center cursor-pointer';
+      el.style.cursor = 'pointer';
+      el.innerHTML = `
+        <div class="w-8 h-8 rounded-full shadow-lg flex items-center justify-center ${ringClass}" style="background-color: ${bgColor};">
+          ${iconSvg}
+        </div>
+        <div class="w-2 h-2 rotate-45 -mt-1 shadow-sm" style="background-color: ${bgColor};"></div>
+      `;
+
+      el.addEventListener('click', (e) => {
+        e.stopPropagation();
+        selectTrashItem(item);
       });
+
+      return el;
     }
 
     // ==========================================
@@ -640,37 +621,53 @@
     function renderVisibleMarkers() {
       if (!map || cachedFilteredItems.length === 0) return;
 
-      markerLayerGroup.clearLayers();
+      // 기존 표시된 오버레이 마커 전부 제거
+      for (let i = 0; i < visibleOverlays.length; i++) {
+        visibleOverlays[i].setMap(null);
+      }
+      visibleOverlays = [];
 
-      const bounds = map.getBounds().pad(0.3); // 화면 밖 30% 여유 영역까지 렌더링
+      const bounds = map.getBounds();
+      const sw = bounds.getSouthWest();
+      const ne = bounds.getNorthEast();
+
+      // 화면 밖 30% 여유 영역까지 렌더링 (부드러운 스크롤 최적화)
+      const latPad = (ne.getLat() - sw.getLat()) * 0.3;
+      const lngPad = (ne.getLng() - sw.getLng()) * 0.3;
+      const minLat = sw.getLat() - latPad;
+      const maxLat = ne.getLat() + latPad;
+      const minLng = sw.getLng() - lngPad;
+      const maxLng = ne.getLng() + lngPad;
+
       let renderedCount = 0;
-      const MAX_VISIBLE_MARKERS = 180; // 최대 렌더링 제한으로 성능 보장
+      const MAX_VISIBLE_MARKERS = 180; // 모바일 60fps 보장 최대 개수
 
       // 가장 가까운 마커 및 선택된 마커는 무조건 렌더링
       const mustRenderIds = new Set();
       if (closestTrash) mustRenderIds.add(closestTrash.id);
       if (selectedTrash) mustRenderIds.add(selectedTrash.id);
 
-      // 뷰포트 내 항목 필터
+      // 뷰포트 내 항목 필터링 및 카카오 CustomOverlay 추가
       for (let i = 0; i < cachedFilteredItems.length; i++) {
         const item = cachedFilteredItems[i];
-        const latLng = L.latLng(item.lat, item.lng);
-
         const isMust = mustRenderIds.has(item.id);
-        const inView = bounds.contains(latLng);
+        const inView = item.lat >= minLat && item.lat <= maxLat && item.lng >= minLng && item.lng <= maxLng;
 
         if (isMust || (inView && renderedCount < MAX_VISIBLE_MARKERS)) {
           const isClosest = closestTrash && (item.id === closestTrash.id);
-          const marker = L.marker([item.lat, item.lng], {
-            icon: getMarkerIcon(item.type, isClosest),
-            zIndexOffset: isClosest ? 500 : 100
+          const markerContent = createMarkerElement(item, isClosest);
+
+          const overlay = new kakao.maps.CustomOverlay({
+            map: map,
+            position: new kakao.maps.LatLng(item.lat, item.lng),
+            content: markerContent,
+            xAnchor: 0.5,
+            yAnchor: 1.0,
+            zIndex: isClosest ? 500 : 100,
+            clickable: true
           });
 
-          marker.on('click', () => {
-            selectTrashItem(item);
-          });
-
-          markerLayerGroup.addLayer(marker);
+          visibleOverlays.push(overlay);
           renderedCount++;
         }
       }
@@ -680,24 +677,26 @@
     // 8. 내 위치 ~ 목적지 점선(Polyline) 그리기
     // ==========================================
     function drawGuidePolyline(targetItem) {
-      if (!targetItem) return;
+      if (!targetItem || !map) return;
 
       if (guidePolyline) {
-        map.removeLayer(guidePolyline);
+        guidePolyline.setMap(null);
+        guidePolyline = null;
       }
 
-      const latlngs = [
-        [userPos.lat, userPos.lng],
-        [targetItem.lat, targetItem.lng]
+      const path = [
+        new kakao.maps.LatLng(userPos.lat, userPos.lng),
+        new kakao.maps.LatLng(targetItem.lat, targetItem.lng)
       ];
 
-      guidePolyline = L.polyline(latlngs, {
-        color: '#3182F6',
-        weight: 4,
-        opacity: 0.85,
-        lineCap: 'round',
-        className: 'guide-polyline'
-      }).addTo(map);
+      guidePolyline = new kakao.maps.Polyline({
+        map: map,
+        path: path,
+        strokeWeight: 4,
+        strokeColor: '#3182F6',
+        strokeOpacity: 0.85,
+        strokeStyle: 'shortdash'
+      });
     }
 
     // ==========================================
@@ -714,11 +713,10 @@
       updateBottomSheet(item);
       drawGuidePolyline(item);
 
-      // 지도 부드럽게 이동 (바텀시트 높이를 감안하여 살짝 아래 오프셋)
-      map.flyTo([item.lat, item.lng], 18, {
-        duration: 0.8,
-        easeLinearity: 0.25
-      });
+      // 카카오 지도 부드러운 패닝 이동
+      if (map) {
+        map.panTo(new kakao.maps.LatLng(item.lat, item.lng));
+      }
     }
 
     // ==========================================
@@ -838,14 +836,16 @@
           updateTrashMarkers();
 
           // 내 위치와 가장 가까운 쓰레기통을 한 화면에 자연스럽게 표시
-          if (closestTrash) {
-            const bounds = L.latLngBounds([
-              [userPos.lat, userPos.lng],
-              [closestTrash.lat, closestTrash.lng]
-            ]);
-            map.fitBounds(bounds, { padding: [120, 60], maxZoom: 18 });
-          } else {
-            map.panTo([userPos.lat, userPos.lng]);
+          if (map) {
+            if (closestTrash) {
+              const bounds = new kakao.maps.LatLngBounds();
+              bounds.extend(new kakao.maps.LatLng(userPos.lat, userPos.lng));
+              bounds.extend(new kakao.maps.LatLng(closestTrash.lat, closestTrash.lng));
+              map.setBounds(bounds, 120, 50, 180, 50);
+              if (map.getLevel() < 3) map.setLevel(3);
+            } else {
+              map.panTo(new kakao.maps.LatLng(userPos.lat, userPos.lng));
+            }
           }
         },
         (error) => {
@@ -873,7 +873,9 @@
       userManuallySelected = false;
       renderUserMarker();
       updateTrashMarkers();
-      map.panTo([userPos.lat, userPos.lng]);
+      if (map) {
+        map.panTo(new kakao.maps.LatLng(userPos.lat, userPos.lng));
+      }
     }
 
     // ==========================================
@@ -901,12 +903,12 @@
           updateTrashMarkers();
 
           // 최근접 쓰레기통과 내 위치가 한 화면에 보이도록 조정
-          if (closestTrash) {
-            const bounds = L.latLngBounds([
-              [userPos.lat, userPos.lng],
-              [closestTrash.lat, closestTrash.lng]
-            ]);
-            map.fitBounds(bounds, { padding: [100, 50], maxZoom: 18 });
+          if (map && closestTrash) {
+            const bounds = new kakao.maps.LatLngBounds();
+            bounds.extend(new kakao.maps.LatLng(userPos.lat, userPos.lng));
+            bounds.extend(new kakao.maps.LatLng(closestTrash.lat, closestTrash.lng));
+            map.setBounds(bounds, 100, 40, 160, 40);
+            if (map.getLevel() < 3) map.setLevel(3);
           }
         });
       });
@@ -921,7 +923,10 @@
       // 내 위치 센터링 버튼 (FAB)
       document.getElementById('btn-recenter').addEventListener('click', () => {
         trackGAEvent('click_recenter');
-        map.flyTo([userPos.lat, userPos.lng], 17, { duration: 0.6 });
+        if (map) {
+          map.setLevel(3);
+          map.panTo(new kakao.maps.LatLng(userPos.lat, userPos.lng));
+        }
       });
 
       // 경로 점선 표시 및 화면 포커싱
@@ -932,11 +937,13 @@
           trash_name: selectedTrash.name
         });
         drawGuidePolyline(selectedTrash);
-        const bounds = L.latLngBounds([
-          [userPos.lat, userPos.lng],
-          [selectedTrash.lat, selectedTrash.lng]
-        ]);
-        map.fitBounds(bounds, { padding: [120, 60], maxZoom: 18 });
+        if (map) {
+          const bounds = new kakao.maps.LatLngBounds();
+          bounds.extend(new kakao.maps.LatLng(userPos.lat, userPos.lng));
+          bounds.extend(new kakao.maps.LatLng(selectedTrash.lat, selectedTrash.lng));
+          map.setBounds(bounds, 120, 50, 180, 50);
+          if (map.getLevel() < 3) map.setLevel(3);
+        }
       });
 
       // 위치 권한 모달 열기/닫기 및 이벤트
