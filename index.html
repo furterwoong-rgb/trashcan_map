@@ -447,6 +447,10 @@
     let hasAnnouncedArrival = false;
     let hasTrackedLocationConsent = false;
 
+    // TMAP 기반 보행자 정밀 경로(인도·횡단보도) 상태
+    let activePedestrianPath = null;
+    let isFetchingPedestrianRoute = false;
+
     // ==========================================
     // 2. 전국 최신 공공데이터 로드
     // ==========================================
@@ -773,27 +777,156 @@
     }
 
     // ==========================================
-    // 8. 내 위치 ~ 목적지 점선(Polyline) 그리기
+    // 8. 내 위치 ~ 목적지 경로(Polyline) 그리기
     // ==========================================
     function drawGuidePolyline(targetItem) {
       if (!targetItem || !map) return;
 
-      const path = [
+      // 1) 내비게이션 중이고 TMAP 보행자 정밀 경로가 존재하는 경우
+      if (isNavigating && activePedestrianPath && activePedestrianPath.length > 0) {
+        // 내 현재 위치와 가장 가까운 경로 점 탐색 (지나온 구간 Trim)
+        let minIdx = 0;
+        let minDist = Infinity;
+        for (let i = 0; i < activePedestrianPath.length; i++) {
+          const pt = activePedestrianPath[i];
+          const d = calculateDistance(userPos.lat, userPos.lng, pt.lat, pt.lng);
+          if (d < minDist) {
+            minDist = d;
+            minIdx = i;
+          }
+        }
+
+        // 경로 이탈 감지 (인도 경로에서 45m 이상 벗어나면 재탐색)
+        if (minDist > 45 && !isFetchingPedestrianRoute) {
+          fetchAndApplyPedestrianRoute(userPos, targetItem);
+        }
+
+        // 지나온 경로는 잘라내고, 내 위치 -> 남은 인도/횡단보도 경로로 연결
+        const remainingCoords = activePedestrianPath.slice(minIdx);
+        const polylinePath = [
+          new kakao.maps.LatLng(userPos.lat, userPos.lng),
+          ...remainingCoords.map(p => new kakao.maps.LatLng(p.lat, p.lng))
+        ];
+
+        if (guidePolyline) {
+          guidePolyline.setPath(polylinePath);
+          guidePolyline.setOptions({
+            strokeWeight: 6,
+            strokeColor: '#3182F6',
+            strokeOpacity: 0.95,
+            strokeStyle: 'solid'
+          });
+        } else {
+          guidePolyline = new kakao.maps.Polyline({
+            map: map,
+            path: polylinePath,
+            strokeWeight: 6,
+            strokeColor: '#3182F6',
+            strokeOpacity: 0.95,
+            strokeStyle: 'solid'
+          });
+        }
+        return;
+      }
+
+      // 2) 일반 탐색 모드 또는 내비 로딩 중: 직선 점선 가이드라인
+      const directPath = [
         new kakao.maps.LatLng(userPos.lat, userPos.lng),
         new kakao.maps.LatLng(targetItem.lat, targetItem.lng)
       ];
 
       if (guidePolyline) {
-        guidePolyline.setPath(path);
-      } else {
-        guidePolyline = new kakao.maps.Polyline({
-          map: map,
-          path: path,
+        guidePolyline.setPath(directPath);
+        guidePolyline.setOptions({
           strokeWeight: 4,
           strokeColor: '#3182F6',
           strokeOpacity: 0.85,
           strokeStyle: 'shortdash'
         });
+      } else {
+        guidePolyline = new kakao.maps.Polyline({
+          map: map,
+          path: directPath,
+          strokeWeight: 4,
+          strokeColor: '#3182F6',
+          strokeOpacity: 0.85,
+          strokeStyle: 'shortdash'
+        });
+      }
+    }
+
+    // ==========================================
+    // 8-1. TMAP 보행자 정밀 경로 비동기 로드
+    // ==========================================
+    async function fetchAndApplyPedestrianRoute(startPos, targetItem) {
+      if (!targetItem || isFetchingPedestrianRoute) return;
+      isFetchingPedestrianRoute = true;
+
+      try {
+        const queryParams = new URLSearchParams({
+          startX: startPos.lng,
+          startY: startPos.lat,
+          endX: targetItem.lng,
+          endY: targetItem.lat
+        });
+
+        let data = null;
+
+        // Vercel Serverless Function 호출
+        try {
+          const res = await fetch(`/api/pedestrian-route?${queryParams.toString()}`);
+          if (res.ok) {
+            data = await res.json();
+          } else if (res.status === 404) {
+            // 로컬 정적 서버 테스트용 Fallback: TMAP API 직접 호출
+            const directRes = await fetch(`https://apis.openapi.sk.com/tmap/routes/pedestrian?version=1&appKey=iK60UGHNRY4v9vNaGNgMz3B4H8zWKyQi70J0FzDL`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                startX: Number(startPos.lng),
+                startY: Number(startPos.lat),
+                endX: Number(targetItem.lng),
+                endY: Number(targetItem.lat),
+                reqCoordType: 'WGS84GEO',
+                resCoordType: 'WGS84GEO',
+                startName: '출발지',
+                endName: '도착지'
+              })
+            });
+            if (directRes.ok) {
+              const rawData = await directRes.json();
+              const path = [];
+              let totalDistance = rawData.features?.[0]?.properties?.totalDistance || 0;
+              let totalTime = rawData.features?.[0]?.properties?.totalTime || 0;
+              if (rawData.features) {
+                for (const f of rawData.features) {
+                  if (f.geometry?.type === 'LineString') {
+                    for (const c of f.geometry.coordinates) {
+                      path.push({ lat: c[1], lng: c[0] });
+                    }
+                  }
+                }
+              }
+              data = { status: 'OK', totalDistance, totalTime, path };
+            }
+          }
+        } catch (serverlessErr) {
+          console.warn("[쓱싹] 서버리스 라우트 호출 시도:", serverlessErr);
+        }
+
+        if (data && data.status === 'OK' && Array.isArray(data.path) && data.path.length > 0) {
+          activePedestrianPath = data.path;
+
+          // 현재 길안내 대상과 일치할 때만 지도 경로선 및 HUD 즉시 갱신
+          if (isNavigating && selectedTrash && selectedTrash.id === targetItem.id) {
+            drawGuidePolyline(selectedTrash);
+            updateNavHUD(selectedTrash, data.totalDistance, data.totalTime);
+          }
+        }
+      } catch (err) {
+        console.warn("[쓱싹] 보행자 정밀 경로 요청 실패 (직선거리 안내 유지):", err);
+      } finally {
+        isFetchingPedestrianRoute = false;
       }
     }
 
@@ -804,6 +937,7 @@
       userManuallySelected = true;
       selectedTrash = item;
       hasAnnouncedArrival = false;
+      activePedestrianPath = null; // 선택 대상 변경 시 정밀 경로 리셋
       trackGAEvent('select_trashcan', {
         trash_id: item.id,
         trash_name: item.name,
@@ -814,6 +948,7 @@
 
       if (isNavigating) {
         updateNavHUD(item);
+        fetchAndApplyPedestrianRoute(userPos, item);
       }
 
       // 카카오 지도 부드러운 패닝 이동
@@ -1119,20 +1254,23 @@
       btnNav.classList.add('bg-rose-500', 'hover:bg-rose-600', 'shadow-rose-500/25');
       btnNavText.textContent = "안내 종료";
 
-      // 가이드라인 그리기
+      // 1) 즉시 직선 가이드라인 임시 렌더링 (체감 대기시간 0초 Optimistic UI)
       drawGuidePolyline(selectedTrash);
 
-      // 보행 밀착 줌 (카카오 level 2: 약 30m 단위)
+      // 2) 보행 밀착 줌 (카카오 level 2: 약 30m 단위)
       if (map) {
         map.setLevel(2);
         map.panTo(new kakao.maps.LatLng(userPos.lat, userPos.lng));
       }
 
-      // 상단 HUD 열기
+      // 3) 상단 HUD 열기
       showNavHUD(selectedTrash);
 
       const statusEl = document.getElementById('sub-status');
-      statusEl.textContent = "🧭 실시간 길안내 진행 중";
+      statusEl.textContent = "🧭 횡단보도·도보 길안내 진행 중";
+
+      // 4) TMAP 정밀 보행자 경로 API 비동기 호출
+      fetchAndApplyPedestrianRoute(userPos, selectedTrash);
 
       trackGAEvent('start_navigation', {
         trash_id: selectedTrash.id,
@@ -1145,6 +1283,7 @@
       if (!isNavigating) return;
       isNavigating = false;
       hasAnnouncedArrival = false;
+      activePedestrianPath = null; // 정밀 경로 초기화
 
       // 바텀시트 메인 버튼 복구 -> "길찾기"
       const btnNav = document.getElementById('btn-start-nav');
@@ -1159,6 +1298,11 @@
       // 지도 줌 레벨 도보 기본(level 4)으로 복구
       if (map) {
         map.setLevel(4);
+      }
+
+      // 점선 가이드라인으로 복구
+      if (selectedTrash) {
+        drawGuidePolyline(selectedTrash);
       }
 
       const statusEl = document.getElementById('sub-status');
@@ -1186,12 +1330,17 @@
       }, 300);
     }
 
-    function updateNavHUD(target) {
+    function updateNavHUD(target, pedestrianDist, pedestrianTime) {
       if (!target) return;
-      const dist = target.distance !== undefined ? target.distance : calculateDistance(userPos.lat, userPos.lng, target.lat, target.lng);
+      const dist = pedestrianDist !== undefined ? pedestrianDist : (target.distance !== undefined ? target.distance : calculateDistance(userPos.lat, userPos.lng, target.lat, target.lng));
       document.getElementById('nav-hud-target').textContent = target.name;
       document.getElementById('nav-hud-distance').textContent = formatDistance(dist);
-      document.getElementById('nav-hud-time').textContent = calculateWalkTime(dist);
+      if (pedestrianTime !== undefined) {
+        const mins = Math.max(1, Math.round(pedestrianTime / 60));
+        document.getElementById('nav-hud-time').textContent = `도보 약 ${mins}분`;
+      } else {
+        document.getElementById('nav-hud-time').textContent = calculateWalkTime(dist);
+      }
     }
 
     function checkArrival(target) {
