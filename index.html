@@ -590,7 +590,7 @@
     function updateAccuracyCircle(lat, lng, accuracy) {
       if (!map) return;
       const pos = new kakao.maps.LatLng(lat, lng);
-      const radius = Math.min(accuracy, 100);
+      const radius = Math.min(Math.round(accuracy), 500);
       if (!accuracyCircle) {
         accuracyCircle = new kakao.maps.Circle({
           map: map,
@@ -947,31 +947,38 @@
 
     function onLocationSuccess(position) {
       const { latitude, longitude, accuracy } = position.coords;
+      const roundedAccuracy = Math.round(accuracy);
 
       // 최초 위치 승인 시 1회 GA4 이벤트 기록
       if (!hasTrackedLocationConsent) {
         hasTrackedLocationConsent = true;
         trackGAEvent('location_granted', {
-          accuracy_m: Math.round(accuracy)
+          accuracy_m: roundedAccuracy
         });
       }
 
-      // GPS 정확도 오차 반경 원 갱신
+      // GPS 정확도 오차 반경 원 갱신 (지점 및 반경 시각화)
       updateAccuracyCircle(latitude, longitude, accuracy);
 
-      // GPS 오차 50m 초과 시 마커 순간이동 방지
-      if (accuracy > 50) {
-        console.warn(`[쓱싹] GPS 오차 큼 (±${Math.round(accuracy)}m)`);
-        const statusEl = document.getElementById('sub-status');
-        statusEl.textContent = `📍 GPS 신호 파악 중 (오차 ±${Math.round(accuracy)}m)`;
-        return;
-      }
-
-      // 2m 미만 미세 흔들림 스킵 (배터리 및 CPU 절약)
       const isFirstFix = (lastProcessedPos === null);
-      if (lastProcessedPos) {
+
+      // 1. 첫 위치 수신(First Fix)이 아닌 이미 안정적인 위치를 잡은 상태에서의 실시간 필터링
+      if (!isFirstFix) {
+        // 기존에 정밀 GPS(<50m)를 유지하다가 일시적으로 심각한 노이즈(오차 > 300m)가 들어온 경우 마커 점프 방지
+        if (accuracy > 300) {
+          console.warn(`[쓱싹] 부정확한 GPS 신호 스킵 (오차 ±${roundedAccuracy}m)`);
+          return;
+        }
+
+        // 2m 미만 미세 흔들림 스킵 (배터리 및 브라우저 성능 최적화)
         const moved = calculateDistance(lastProcessedPos.lat, lastProcessedPos.lng, latitude, longitude);
         if (moved < 2) {
+          return;
+        }
+
+        // 보행 속도를 초과하는 비정상적 순간이동 필터링 (순간 100m 이상 점프 & 오차 100m 이상)
+        if (moved > 100 && accuracy > 100) {
+          console.warn(`[쓱싹] 비정상 순간이동 필터링: ${moved.toFixed(1)}m (오차 ±${roundedAccuracy}m)`);
           return;
         }
       }
@@ -979,8 +986,17 @@
       lastProcessedPos = { lat: latitude, lng: longitude };
       userPos = { lat: latitude, lng: longitude };
 
+      // 상단 상태 안내 텍스트
       const statusEl = document.getElementById('sub-status');
-      statusEl.textContent = isNavigating ? "🧭 실시간 길안내 진행 중" : "📍 실시간 위치 추적 중";
+      if (isNavigating) {
+        statusEl.textContent = "🧭 실시간 길안내 진행 중";
+      } else if (roundedAccuracy > 100) {
+        statusEl.textContent = `📍 실내/Wi-Fi 기반 (오차 ±${roundedAccuracy}m)`;
+      } else if (roundedAccuracy > 30) {
+        statusEl.textContent = `📍 실시간 위치 (오차 ±${roundedAccuracy}m)`;
+      } else {
+        statusEl.textContent = "📍 실시간 위치 추적 중";
+      }
 
       // 내 위치 펄스 마커 갱신
       renderUserMarker();
