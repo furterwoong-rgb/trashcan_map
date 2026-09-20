@@ -448,36 +448,49 @@
     // 5. 지도 초기화 (카카오 지도 Web API HD 엔진)
     // ==========================================
     function initMap() {
+      function startKakaoMap() {
+        kakao.maps.load(() => {
+          const container = document.getElementById('map');
+          const options = {
+            center: new kakao.maps.LatLng(userPos.lat, userPos.lng),
+            level: 4 // 도보 탐색에 최적화된 확대 수준
+          };
+          map = new kakao.maps.Map(container, options);
+
+          // 사파리 및 모바일 브라우저 렌더링 타이밍 보정 (회색 화면 방지)
+          setTimeout(() => { if (map) map.relayout(); }, 150);
+          setTimeout(() => { if (map) map.relayout(); }, 500);
+
+          window.addEventListener('resize', () => {
+            if (map) map.relayout();
+          });
+
+          // 지도 드래그 및 줌 완료 시 뷰포트 내 마커 동적 갱신
+          kakao.maps.event.addListener(map, 'idle', () => {
+            renderVisibleMarkers();
+          });
+
+          renderUserMarker();
+          updateTrashMarkers();
+        });
+      }
+
       if (typeof kakao === 'undefined' || !kakao.maps) {
-        console.error('[쓱싹] 카카오 지도 SDK가 아직 로드되지 않았습니다.');
+        let retryCount = 0;
+        const retryTimer = setInterval(() => {
+          retryCount++;
+          if (typeof kakao !== 'undefined' && kakao.maps) {
+            clearInterval(retryTimer);
+            startKakaoMap();
+          } else if (retryCount >= 40) { // 4초 대기
+            clearInterval(retryTimer);
+            console.error('[쓱싹] 카카오 지도 SDK 로드 실패: 카카오 개발자 콘솔 Web 플랫폼에 사이트 도메인(https://trashcan-map.vercel.app) 등록 여부를 확인해주세요.');
+          }
+        }, 100);
         return;
       }
 
-      kakao.maps.load(() => {
-        const container = document.getElementById('map');
-        const options = {
-          center: new kakao.maps.LatLng(userPos.lat, userPos.lng),
-          level: 4 // 도보 탐색에 최적화된 확대 수준
-        };
-        map = new kakao.maps.Map(container, options);
-
-        // 브라우저 렌더링 후 레이아웃 재계산 (모바일 회색 화면 방지)
-        setTimeout(() => {
-          if (map) map.relayout();
-        }, 150);
-
-        window.addEventListener('resize', () => {
-          if (map) map.relayout();
-        });
-
-        // 지도 드래그 및 줌 완료 시 뷰포트 내 마커 동적 갱신
-        kakao.maps.event.addListener(map, 'idle', () => {
-          renderVisibleMarkers();
-        });
-
-        renderUserMarker();
-        updateTrashMarkers();
-      });
+      startKakaoMap();
     }
 
     // ==========================================
