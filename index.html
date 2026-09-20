@@ -93,7 +93,10 @@
       max-height: none !important;
     }
 
-    /* Marker Pulse Animation */
+    /* Marker Pulse Animation & Smooth Real-time Transition */
+    .custom-pulse-marker {
+      transition: transform 0.4s cubic-bezier(0.25, 1, 0.5, 1);
+    }
     .pulse-dot-container {
       position: relative;
       width: 28px;
@@ -262,24 +265,69 @@
 
         <!-- Action Buttons -->
         <div class="flex items-center gap-2.5">
-          <!-- Guide to Route (Polyline toggle) -->
-          <button id="btn-show-line" class="flex-1 flex items-center justify-center gap-2 py-3 px-4 rounded-2xl bg-brand-500 hover:bg-brand-600 active:scale-[0.98] text-white font-bold text-sm shadow-md shadow-brand-500/25 transition-all">
-            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M13 7l5 5m0 0l-5 5m5-5H6"/>
+          <!-- In-App Walking Navigation Button (웹 실시간 길찾기) -->
+          <button id="btn-start-nav" class="flex-1 flex items-center justify-center gap-2 py-3.5 px-4 rounded-2xl bg-brand-500 hover:bg-brand-600 active:scale-[0.98] text-white font-bold text-sm shadow-md shadow-brand-500/25 transition-all">
+            <svg id="nav-btn-icon" class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.2" d="M12 2L4.5 20.29l.71.71L12 18l6.79 3 .71-.71z"/>
             </svg>
-            <span>경로 점선 표시</span>
+            <span id="btn-nav-text">길찾기</span>
           </button>
 
-          <!-- External Map Navigate Link -->
-          <button id="btn-navigate" class="flex items-center justify-center gap-1.5 py-3 px-4 rounded-2xl bg-gray-100 hover:bg-gray-200 active:scale-[0.98] text-gray-800 font-semibold text-sm transition-all" title="외부 지도 앱 길찾기">
-            <svg class="w-4 h-4 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 20l-5.447-2.724A1 1 0 013 16.382V5.618a1 1 0 011.447-.894L9 7m0 13l6-3m-6 3V7m6 10l4.553 2.276A1 1 0 0021 18.382V7.618a1 1 0 00-.553-.894L15 4m0 13V4m0 0L9 7"/>
+          <!-- External Map Navigate Link (다른 앱으로 길찾기) -->
+          <button id="btn-navigate" class="flex items-center justify-center gap-1.5 py-3.5 px-3.5 rounded-2xl bg-gray-100 hover:bg-gray-200 active:scale-[0.98] text-gray-700 font-semibold text-xs sm:text-sm transition-all flex-shrink-0" title="카카오맵·네이버지도·구글지도">
+            <svg class="w-4 h-4 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"/>
             </svg>
-            <span>길찾기</span>
+            <span>다른 앱으로 길찾기</span>
           </button>
         </div>
 
       </div>
+    </div>
+  </div>
+
+  <!-- In-App Navigation HUD Banner (길찾기 모드 활성화 시 상단 고정) -->
+  <div id="nav-hud" class="fixed top-3 inset-x-3 max-w-md mx-auto z-40 hidden transition-all duration-300 transform -translate-y-4 opacity-0 pointer-events-auto">
+    <div class="bg-gray-900/95 backdrop-blur-xl text-white rounded-3xl p-4 shadow-2xl border border-gray-700/60 flex items-center justify-between gap-3">
+      <div class="flex items-center gap-3 min-w-0">
+        <div class="w-10 h-10 rounded-2xl bg-brand-500 text-white flex items-center justify-center flex-shrink-0 shadow-lg shadow-brand-500/30 animate-pulse">
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M12 2L4.5 20.29l.71.71L12 18l6.79 3 .71-.71z"/>
+          </svg>
+        </div>
+        <div class="min-w-0">
+          <div class="flex items-center gap-1.5">
+            <span class="px-1.5 py-0.5 rounded text-[10px] font-black bg-brand-500 text-white">실시간 길안내</span>
+            <span id="nav-hud-target" class="text-xs text-gray-300 font-medium truncate">목적지</span>
+          </div>
+          <div class="flex items-baseline gap-2 mt-0.5">
+            <span id="nav-hud-distance" class="text-xl font-black text-white tracking-tight">--</span>
+            <span id="nav-hud-time" class="text-xs font-bold text-brand-400">도보 계산 중</span>
+          </div>
+        </div>
+      </div>
+      <button id="btn-stop-nav-hud" class="px-3.5 py-2 rounded-xl bg-white/10 hover:bg-white/20 active:scale-95 text-xs font-bold text-gray-200 hover:text-white border border-white/15 transition-all flex-shrink-0">
+        안내 종료
+      </button>
+    </div>
+  </div>
+
+  <!-- Arrival Alert Modal (도착 알림 팝업) -->
+  <div id="arrival-modal" class="fixed inset-0 z-50 bg-black/40 backdrop-blur-sm hidden items-center justify-center p-4">
+    <div class="bg-white rounded-3xl max-w-sm w-full p-6 shadow-2xl text-center space-y-4 transform transition-all">
+      <div class="w-16 h-16 rounded-3xl bg-emerald-50 text-emerald-500 flex items-center justify-center text-3xl mx-auto shadow-inner">
+        🎉
+      </div>
+      <div class="space-y-1.5">
+        <h3 class="text-lg font-black text-gray-900">목적지 주변에 도착했습니다!</h3>
+        <p id="arrival-target-name" class="text-sm font-bold text-brand-600">이태원로254</p>
+        <p class="text-xs text-gray-500 leading-relaxed">
+          10m 이내에 쓰레기통이 위치해 있습니다.<br/>주변 인도나 가로등 근처를 둘러보세요.
+        </p>
+      </div>
+      <button id="btn-confirm-arrival" class="w-full py-3.5 px-4 rounded-2xl bg-gray-900 hover:bg-black active:scale-[0.98] text-white font-bold text-sm shadow-lg transition-all">
+        확인 (길안내 완료)
+      </button>
     </div>
   </div>
 
@@ -387,8 +435,17 @@
 
     let map = null;
     let userOverlay = null;
+    let accuracyCircle = null; // GPS 오차 반경 원 (kakao.maps.Circle)
     let visibleOverlays = [];
     let guidePolyline = null;
+
+    // 실시간 위치 추적 및 웹 도보 내비게이션 상태
+    let watchId = null;
+    let isTrackingLocked = true; // 화면 추종(Lock-in) 모드 활성화 여부
+    let isNavigating = false;     // 웹 도보 내비게이션 진행 여부
+    let lastProcessedPos = null;
+    let hasAnnouncedArrival = false;
+    let hasTrackedLocationConsent = false;
 
     // ==========================================
     // 2. 전국 최신 공공데이터 로드
@@ -465,6 +522,14 @@
             if (map) map.relayout();
           });
 
+          // 사용자가 지도를 터치/드래그하면 자동 화면 추종(Lock-in) 일시 해제
+          kakao.maps.event.addListener(map, 'dragstart', () => {
+            if (isTrackingLocked) {
+              isTrackingLocked = false;
+              updateRecenterButtonUI();
+            }
+          });
+
           // 지도 드래그 및 줌 완료 시 뷰포트 내 마커 동적 갱신
           kakao.maps.event.addListener(map, 'idle', () => {
             renderVisibleMarkers();
@@ -519,6 +584,27 @@
           yAnchor: 0.5,
           zIndex: 1000
         });
+      }
+    }
+
+    function updateAccuracyCircle(lat, lng, accuracy) {
+      if (!map) return;
+      const pos = new kakao.maps.LatLng(lat, lng);
+      const radius = Math.min(accuracy, 100);
+      if (!accuracyCircle) {
+        accuracyCircle = new kakao.maps.Circle({
+          map: map,
+          center: pos,
+          radius: radius,
+          strokeWeight: 1,
+          strokeColor: '#3182F6',
+          strokeOpacity: 0.35,
+          fillColor: '#3182F6',
+          fillOpacity: 0.08
+        });
+      } else {
+        accuracyCircle.setPosition(pos);
+        accuracyCircle.setRadius(radius);
       }
     }
 
@@ -692,24 +778,23 @@
     function drawGuidePolyline(targetItem) {
       if (!targetItem || !map) return;
 
-      if (guidePolyline) {
-        guidePolyline.setMap(null);
-        guidePolyline = null;
-      }
-
       const path = [
         new kakao.maps.LatLng(userPos.lat, userPos.lng),
         new kakao.maps.LatLng(targetItem.lat, targetItem.lng)
       ];
 
-      guidePolyline = new kakao.maps.Polyline({
-        map: map,
-        path: path,
-        strokeWeight: 4,
-        strokeColor: '#3182F6',
-        strokeOpacity: 0.85,
-        strokeStyle: 'shortdash'
-      });
+      if (guidePolyline) {
+        guidePolyline.setPath(path);
+      } else {
+        guidePolyline = new kakao.maps.Polyline({
+          map: map,
+          path: path,
+          strokeWeight: 4,
+          strokeColor: '#3182F6',
+          strokeOpacity: 0.85,
+          strokeStyle: 'shortdash'
+        });
+      }
     }
 
     // ==========================================
@@ -718,6 +803,7 @@
     function selectTrashItem(item) {
       userManuallySelected = true;
       selectedTrash = item;
+      hasAnnouncedArrival = false;
       trackGAEvent('select_trashcan', {
         trash_id: item.id,
         trash_name: item.name,
@@ -725,6 +811,10 @@
       });
       updateBottomSheet(item);
       drawGuidePolyline(item);
+
+      if (isNavigating) {
+        updateNavHUD(item);
+      }
 
       // 카카오 지도 부드러운 패닝 이동
       if (map) {
@@ -823,60 +913,142 @@
     }
 
     // ==========================================
-    // 13. 위치 권한 및 GPS 추적
+    // 13. 위치 권한 및 실시간 GPS 추적 (watchPosition)
     // ==========================================
     function requestLocation() {
-      const statusEl = document.getElementById('sub-status');
-      statusEl.textContent = "정밀 GPS 위치 측정 중...";
+      startLiveLocationTracking();
+    }
 
+    function startLiveLocationTracking() {
       if (!navigator.geolocation) {
         fallbackLocation("GPS를 지원하지 않는 브라우저입니다.");
         return;
       }
 
-      navigator.geolocation.getCurrentPosition(
-        (position) => {
-          userPos = {
-            lat: position.coords.latitude,
-            lng: position.coords.longitude
-          };
-          trackGAEvent('location_granted', {
-            accuracy_m: Math.round(position.coords.accuracy)
-          });
-          statusEl.textContent = "📍 현재 위치 기준 실시간 탐색됨";
-          userManuallySelected = false;
-          renderUserMarker();
-          updateTrashMarkers();
+      const statusEl = document.getElementById('sub-status');
+      statusEl.textContent = "📍 실시간 GPS 연결 중...";
 
-          // 내 위치와 가장 가까운 쓰레기통을 한 화면에 자연스럽게 표시
-          if (map) {
-            if (closestTrash) {
-              const bounds = new kakao.maps.LatLngBounds();
-              bounds.extend(new kakao.maps.LatLng(userPos.lat, userPos.lng));
-              bounds.extend(new kakao.maps.LatLng(closestTrash.lat, closestTrash.lng));
-              map.setBounds(bounds, 120, 50, 180, 50);
-              if (map.getLevel() < 3) map.setLevel(3);
-            } else {
-              map.panTo(new kakao.maps.LatLng(userPos.lat, userPos.lng));
-            }
-          }
-        },
-        (error) => {
-          let reason = "위치 권한 미허용";
-          if (error.code === error.PERMISSION_DENIED) reason = "위치 권한이 거부됨";
-          else if (error.code === error.TIMEOUT) reason = "위치 응답 시간 초과";
-          trackGAEvent('location_denied', {
-            error_code: error.code,
-            reason: reason
-          });
-          fallbackLocation(reason);
-        },
-        {
-          enableHighAccuracy: true,
-          timeout: 8000,
-          maximumAge: 5000
-        }
+      if (watchId !== null) {
+        navigator.geolocation.clearWatch(watchId);
+      }
+
+      const options = {
+        enableHighAccuracy: true,
+        timeout: 10000,
+        maximumAge: 0
+      };
+
+      watchId = navigator.geolocation.watchPosition(
+        onLocationSuccess,
+        onLocationError,
+        options
       );
+    }
+
+    function onLocationSuccess(position) {
+      const { latitude, longitude, accuracy } = position.coords;
+
+      // 최초 위치 승인 시 1회 GA4 이벤트 기록
+      if (!hasTrackedLocationConsent) {
+        hasTrackedLocationConsent = true;
+        trackGAEvent('location_granted', {
+          accuracy_m: Math.round(accuracy)
+        });
+      }
+
+      // GPS 정확도 오차 반경 원 갱신
+      updateAccuracyCircle(latitude, longitude, accuracy);
+
+      // GPS 오차 50m 초과 시 마커 순간이동 방지
+      if (accuracy > 50) {
+        console.warn(`[쓱싹] GPS 오차 큼 (±${Math.round(accuracy)}m)`);
+        const statusEl = document.getElementById('sub-status');
+        statusEl.textContent = `📍 GPS 신호 파악 중 (오차 ±${Math.round(accuracy)}m)`;
+        return;
+      }
+
+      // 2m 미만 미세 흔들림 스킵 (배터리 및 CPU 절약)
+      const isFirstFix = (lastProcessedPos === null);
+      if (lastProcessedPos) {
+        const moved = calculateDistance(lastProcessedPos.lat, lastProcessedPos.lng, latitude, longitude);
+        if (moved < 2) {
+          return;
+        }
+      }
+
+      lastProcessedPos = { lat: latitude, lng: longitude };
+      userPos = { lat: latitude, lng: longitude };
+
+      const statusEl = document.getElementById('sub-status');
+      statusEl.textContent = isNavigating ? "🧭 실시간 길안내 진행 중" : "📍 실시간 위치 추적 중";
+
+      // 내 위치 펄스 마커 갱신
+      renderUserMarker();
+
+      // 전체 쓰레기통과의 거리 실시간 갱신
+      updateDistancesAndNearest();
+
+      // 화면 추종 모드일 때 지도 중심 따라가기
+      if (isTrackingLocked && map) {
+        map.panTo(new kakao.maps.LatLng(latitude, longitude));
+      }
+
+      // 첫 GPS 수신 시 내 위치와 가장 가까운 쓰레기통을 한 화면에 자연스럽게 표시
+      if (isFirstFix && map) {
+        if (closestTrash) {
+          const bounds = new kakao.maps.LatLngBounds();
+          bounds.extend(new kakao.maps.LatLng(userPos.lat, userPos.lng));
+          bounds.extend(new kakao.maps.LatLng(closestTrash.lat, closestTrash.lng));
+          map.setBounds(bounds, 120, 50, 180, 50);
+          if (map.getLevel() < 3) map.setLevel(3);
+        } else {
+          map.panTo(new kakao.maps.LatLng(userPos.lat, userPos.lng));
+        }
+      }
+
+      // 선택된 목적지 가이드라인 및 바텀시트/HUD 갱신
+      if (selectedTrash) {
+        drawGuidePolyline(selectedTrash);
+        updateBottomSheet(selectedTrash);
+        if (isNavigating) {
+          updateNavHUD(selectedTrash);
+          checkArrival(selectedTrash);
+        }
+      }
+    }
+
+    function onLocationError(error) {
+      let reason = "위치 권한 미허용";
+      if (error.code === error.PERMISSION_DENIED) reason = "위치 권한이 거부됨";
+      else if (error.code === error.TIMEOUT) reason = "위치 응답 시간 초과";
+      trackGAEvent('location_denied', {
+        error_code: error.code,
+        reason: reason
+      });
+      fallbackLocation(reason);
+    }
+
+    function updateDistancesAndNearest() {
+      if (cachedFilteredItems.length === 0) return;
+
+      let minDistance = Infinity;
+      let nearest = null;
+
+      for (let i = 0; i < cachedFilteredItems.length; i++) {
+        const item = cachedFilteredItems[i];
+        const dist = calculateDistance(userPos.lat, userPos.lng, item.lat, item.lng);
+        item.distance = dist;
+        if (dist < minDistance) {
+          minDistance = dist;
+          nearest = item;
+        }
+      }
+
+      closestTrash = nearest;
+
+      if (!userManuallySelected && !isNavigating) {
+        selectedTrash = closestTrash;
+      }
     }
 
     function fallbackLocation(reason) {
@@ -884,11 +1056,158 @@
       statusEl.textContent = `📍 ${reason} (${DEFAULT_LOCATION.name})`;
       userPos = { lat: DEFAULT_LOCATION.lat, lng: DEFAULT_LOCATION.lng };
       userManuallySelected = false;
+      if (watchId !== null) {
+        navigator.geolocation.clearWatch(watchId);
+        watchId = null;
+      }
       renderUserMarker();
       updateTrashMarkers();
       if (map) {
         map.panTo(new kakao.maps.LatLng(userPos.lat, userPos.lng));
       }
+    }
+
+    function updateRecenterButtonUI() {
+      const btn = document.getElementById('btn-recenter');
+      if (isTrackingLocked) {
+        btn.classList.remove('text-gray-700');
+        btn.classList.add('text-brand-600', 'ring-2', 'ring-brand-500/30', 'bg-blue-50');
+      } else {
+        btn.classList.remove('text-brand-600', 'ring-2', 'ring-brand-500/30', 'bg-blue-50');
+        btn.classList.add('text-gray-700');
+      }
+    }
+
+    // ==========================================
+    // 13-1. 자체 웹 도보 내비게이션 기능
+    // ==========================================
+    function startNavigation() {
+      if (!selectedTrash) {
+        if (closestTrash) {
+          selectedTrash = closestTrash;
+        } else {
+          alert("길안내를 시작할 쓰레기통을 먼저 선택해주세요.");
+          return;
+        }
+      }
+
+      isNavigating = true;
+      isTrackingLocked = true;
+      hasAnnouncedArrival = false;
+      updateRecenterButtonUI();
+
+      // 바텀시트 메인 버튼 UI 변경 -> "안내 종료"
+      const btnNav = document.getElementById('btn-start-nav');
+      const btnNavText = document.getElementById('btn-nav-text');
+      btnNav.classList.remove('bg-brand-500', 'hover:bg-brand-600', 'shadow-brand-500/25');
+      btnNav.classList.add('bg-rose-500', 'hover:bg-rose-600', 'shadow-rose-500/25');
+      btnNavText.textContent = "안내 종료";
+
+      // 가이드라인 그리기
+      drawGuidePolyline(selectedTrash);
+
+      // 보행 밀착 줌 (카카오 level 2: 약 30m 단위)
+      if (map) {
+        map.setLevel(2);
+        map.panTo(new kakao.maps.LatLng(userPos.lat, userPos.lng));
+      }
+
+      // 상단 HUD 열기
+      showNavHUD(selectedTrash);
+
+      const statusEl = document.getElementById('sub-status');
+      statusEl.textContent = "🧭 실시간 길안내 진행 중";
+
+      trackGAEvent('start_navigation', {
+        trash_id: selectedTrash.id,
+        trash_name: selectedTrash.name,
+        initial_distance_m: selectedTrash.distance || 0
+      });
+    }
+
+    function stopNavigation() {
+      if (!isNavigating) return;
+      isNavigating = false;
+      hasAnnouncedArrival = false;
+
+      // 바텀시트 메인 버튼 복구 -> "길찾기"
+      const btnNav = document.getElementById('btn-start-nav');
+      const btnNavText = document.getElementById('btn-nav-text');
+      btnNav.classList.remove('bg-rose-500', 'hover:bg-rose-600', 'shadow-rose-500/25');
+      btnNav.classList.add('bg-brand-500', 'hover:bg-brand-600', 'shadow-brand-500/25');
+      btnNavText.textContent = "길찾기";
+
+      // 상단 HUD 닫기
+      hideNavHUD();
+
+      // 지도 줌 레벨 도보 기본(level 4)으로 복구
+      if (map) {
+        map.setLevel(4);
+      }
+
+      const statusEl = document.getElementById('sub-status');
+      statusEl.textContent = "📍 실시간 위치 추적 중";
+
+      trackGAEvent('stop_navigation', {
+        trash_id: selectedTrash ? selectedTrash.id : null
+      });
+    }
+
+    function showNavHUD(target) {
+      const hud = document.getElementById('nav-hud');
+      updateNavHUD(target);
+      hud.classList.remove('hidden');
+      requestAnimationFrame(() => {
+        hud.classList.remove('-translate-y-4', 'opacity-0');
+      });
+    }
+
+    function hideNavHUD() {
+      const hud = document.getElementById('nav-hud');
+      hud.classList.add('-translate-y-4', 'opacity-0');
+      setTimeout(() => {
+        hud.classList.add('hidden');
+      }, 300);
+    }
+
+    function updateNavHUD(target) {
+      if (!target) return;
+      const dist = target.distance !== undefined ? target.distance : calculateDistance(userPos.lat, userPos.lng, target.lat, target.lng);
+      document.getElementById('nav-hud-target').textContent = target.name;
+      document.getElementById('nav-hud-distance').textContent = formatDistance(dist);
+      document.getElementById('nav-hud-time').textContent = calculateWalkTime(dist);
+    }
+
+    function checkArrival(target) {
+      if (!isNavigating || !target || hasAnnouncedArrival) return;
+      const dist = target.distance !== undefined ? target.distance : calculateDistance(userPos.lat, userPos.lng, target.lat, target.lng);
+
+      if (dist <= 10) {
+        hasAnnouncedArrival = true;
+        // 스마트폰 햅틱 진동 피드백
+        if ('vibrate' in navigator) {
+          try { navigator.vibrate([200, 100, 200, 100, 400]); } catch (e) {}
+        }
+        trackGAEvent('arrive_destination', {
+          trash_id: target.id,
+          trash_name: target.name
+        });
+        showArrivalModal(target);
+      }
+    }
+
+    function showArrivalModal(target) {
+      const modal = document.getElementById('arrival-modal');
+      document.getElementById('arrival-target-name').textContent = target.name;
+      modal.classList.remove('hidden');
+      modal.classList.add('flex');
+    }
+
+    function hideArrivalModal() {
+      const modal = document.getElementById('arrival-modal');
+      modal.classList.add('hidden');
+      modal.classList.remove('flex');
+      stopNavigation();
     }
 
     // ==========================================
@@ -933,29 +1252,47 @@
         requestLocation();
       });
 
-      // 내 위치 센터링 버튼 (FAB)
+      // 내 위치 센터링 버튼 (FAB) - 추종 모드 복구
       document.getElementById('btn-recenter').addEventListener('click', () => {
         trackGAEvent('click_recenter');
+        isTrackingLocked = true;
+        updateRecenterButtonUI();
         if (map) {
-          map.setLevel(3);
+          map.setLevel(isNavigating ? 2 : 3);
           map.panTo(new kakao.maps.LatLng(userPos.lat, userPos.lng));
         }
       });
 
-      // 경로 점선 표시 및 화면 포커싱
-      document.getElementById('btn-show-line').addEventListener('click', () => {
-        if (!selectedTrash) return;
-        trackGAEvent('click_show_line', {
-          trash_id: selectedTrash.id,
-          trash_name: selectedTrash.name
-        });
-        drawGuidePolyline(selectedTrash);
-        if (map) {
-          const bounds = new kakao.maps.LatLngBounds();
-          bounds.extend(new kakao.maps.LatLng(userPos.lat, userPos.lng));
-          bounds.extend(new kakao.maps.LatLng(selectedTrash.lat, selectedTrash.lng));
-          map.setBounds(bounds, 120, 50, 180, 50);
-          if (map.getLevel() < 3) map.setLevel(3);
+      // 웹 자체 도보 내비게이션 토글 버튼
+      document.getElementById('btn-start-nav').addEventListener('click', () => {
+        if (isNavigating) {
+          stopNavigation();
+        } else {
+          startNavigation();
+        }
+      });
+
+      // HUD 내비 종료 버튼
+      document.getElementById('btn-stop-nav-hud').addEventListener('click', () => {
+        stopNavigation();
+      });
+
+      // 도착 알림 모달 확인 버튼
+      document.getElementById('btn-confirm-arrival').addEventListener('click', () => {
+        hideArrivalModal();
+      });
+
+      // 화면 백그라운드 전환 시 배터리 절약을 위한 GPS 일시정지 및 복귀
+      document.addEventListener('visibilitychange', () => {
+        if (document.hidden) {
+          if (watchId !== null) {
+            navigator.geolocation.clearWatch(watchId);
+            watchId = null;
+          }
+        } else {
+          if (watchId === null && hasTrackedLocationConsent) {
+            startLiveLocationTracking();
+          }
         }
       });
 
