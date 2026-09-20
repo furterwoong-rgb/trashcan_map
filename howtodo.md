@@ -143,6 +143,10 @@
 
 ## 3. 실시간 위치 매핑 기능 (진짜 지도앱 같은 Lock-in)
 
+> [!NOTE]
+> 📖 **상세 기술 설계 및 카카오 공식 API 기반 실행 계획서**: [real_time_mapping_feature.md](file:///Users/woongyeol/trash_map/real_time_mapping_feature.md)를 반드시 참고하세요.
+> 카카오 지도 공식 Web API 문서 기반의 `CustomOverlay.setPosition`, `Map.panTo`, `Polyline.setPath`, `Circle(정확도 반경)`, GPS Jitter 방지 알고리즘 및 추종 모드(Lock-in) 상태 머신이 구체적으로 설계되어 있습니다.
+
 ### 🎯 목표
 * 사용자가 길거리를 걸어갈 때 내 위치(파란 원)가 부드럽게 실시간으로 따라오고, 쓰레기통과의 남은 거리가 실시간으로 갱신되도록 개선.
 
