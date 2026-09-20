@@ -17,22 +17,99 @@
 
 ---
 
-## 1. 모바일 지도 해상도 고급화 (Retina @2x 타일 적용)
+## 1. 모바일 지도 해상도 고급화 (Kakao Maps Web API HD 엔진 전환)
 
-### 🎯 문제점
-* 현재 스마트폰(아이폰 Super Retina, 갤럭시 AMOLED)은 디스플레이 밀도(DPR)가 2.0~3.0배인데, 기본 1x 래스터 타일을 늘려 보여주어 텍스트와 도로선이 약간 흐릿하거나 자글자글하게 보임.
+<!-- 
+  [공식 출처 레퍼런스]
+  1. 카카오 지도 Web API 시작 가이드: https://apis.map.kakao.com/web/guide/
+  2. 카카오 개발자 콘솔 (도메인 등록 및 앱키): https://developers.kakao.com/console/app
+  3. 카카오 지도 고해상도(HD) 기본 지원 및 명세: https://apis.map.kakao.com/web/documentation/#disableHD
+  4. 커스텀 오버레이(CustomOverlay) 공식 샘플: https://apis.map.kakao.com/web/sample/customOverlay1/
+  5. 마커 클러스터러(MarkerClusterer) 공식 샘플: https://apis.map.kakao.com/web/sample/basicClusterer/
+-->
 
-### 🛠️ 구현 방법
-* Leaflet `L.tileLayer` 설정에 **Retina 감지 및 고해상도 타일 URL** 옵션 적용:
-  ```javascript
-  // CartoDB Positron 고해상도 Retina 타일 적용
-  L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', {
-    subdomains: 'abcd',
-    maxZoom: 19,
-    detectRetina: true // 스마트폰 화면 밀도에 맞춰 @2x 타일을 자동 호출
-  }).addTo(map);
+### 🎯 왜 카카오 지도 API로 모바일 해상도 문제를 해결하는가?
+* **고해상도(HD Retina) 기본 내장**:
+  - 카카오 지도 Web API는 모바일 디바이스(아이폰 Super Retina, 갤럭시 AMOLED)의 픽셀 밀도(DPR)를 자동으로 감지하여 **HD급 고해상도 타일을 기본 타일로 서빙**합니다.
+  - 별도의 화질 저하 없이 국내 도로명, 횡단보도, 건물 윤곽선이 벡터급 선명도로 렌더링됩니다.
+  - *출처:* [Kakao 지도 Web API Docs - disableHD()](https://apis.map.kakao.com/web/documentation/#disableHD) (고해상도 기기에서 기본값으로 HD 타일 자동 활성화)
+
+---
+
+### 🛠️ 단계별 구체적 실행 계획
+
+#### [Step 1] 카카오 개발자 콘솔 Web 플랫폼 도메인 등록 (필수 선행 조건)
+* **목적**: 발급받은 JavaScript 키가 승인된 웹사이트에서만 작동하도록 도메인 화이트리스트 등록.
+* **설정 경로**:
+  1. [카카오 개발자 콘솔](https://developers.kakao.com/console/app) ➔ 내 애플리케이션 선택
+  2. 좌측 메뉴 **[앱 설정] ➔ [플랫폼] ➔ [Web 플랫폼 등록]**
+  3. **사이트 도메인(Site Domain)** 입력:
+     - 로컬 테스트: `http://localhost:3000`
+     - 실제 Vercel 배포 주소: `https://trashcan-map.vercel.app`
+* *출처:* [카카오 지도 시작 가이드 - 플랫폼 등록](https://apis.map.kakao.com/web/guide/#loadstart)
+
+#### [Step 2] HTML 내 카카오 지도 Web SDK 로드 스크립트 선언
+* 기존 Leaflet CDN(`leaflet.css`, `leaflet.js`) 대신 카카오 지도 공식 SDK 삽입:
+  ```html
+  <!-- 
+    카카오 지도 Web API v2 SDK (비동기 안전 로딩 및 클러스터러 라이브러리 포함)
+    출처: https://apis.map.kakao.com/web/guide/#loadstart 
+  -->
+  <script type="text/javascript" src="//dapi.kakao.com/v2/maps/sdk.js?appkey=발급받은_JAVASCRIPT_KEY&libraries=clusterer&autoload=false"></script>
   ```
-* **결과**: 벡터 지도처럼 글자와 도로선이 칼같이 선명해져 앱의 완성도가 급격히 상승함.
+  *(※ `autoload=false`를 주어 브라우저 렌더링 후 `kakao.maps.load()`를 통해 가장 안정적으로 초기화)*
+
+#### [Step 3] 지도 컨테이너 초기화 및 HD 렌더링
+* `index.html` 내 `initMap()` 함수를 카카오 지도 문법으로 전환:
+  ```javascript
+  /*
+    출처: https://apis.map.kakao.com/web/sample/basicMap/
+  */
+  kakao.maps.load(() => {
+    const container = document.getElementById('map');
+    const options = {
+      center: new kakao.maps.LatLng(userPos.lat, userPos.lng), // 중심 좌표
+      level: 3 // 확대 레벨 (카카오는 숫자가 작을수록 확대, 3~4가 도보 최적)
+    };
+    map = new kakao.maps.Map(container, options);
+    
+    // 모바일 리사이즈 시 깨짐 방지
+    window.addEventListener('resize', () => map.relayout());
+  });
+  ```
+
+#### [Step 4] 커스텀 마커를 카카오 `CustomOverlay`로 1:1 전환
+* 기존 Leaflet `L.divIcon`으로 만든 펄스 링(내 위치) 및 토스 스타일 쓰레기통 마커 DOM을 카카오의 `kakao.maps.CustomOverlay`로 완벽 호환:
+  ```javascript
+  /*
+    출처: https://apis.map.kakao.com/web/sample/customOverlay1/
+  */
+  function renderUserMarker() {
+    const content = `
+      <div class="custom-pulse-marker">
+        <div class="pulse-dot-container">
+          <div class="pulse-ring"></div>
+          <div class="pulse-core"></div>
+        </div>
+      </div>
+    `;
+    const userOverlay = new kakao.maps.CustomOverlay({
+      position: new kakao.maps.LatLng(userPos.lat, userPos.lng),
+      content: content,
+      yAnchor: 0.5,
+      zIndex: 1000
+    });
+    userOverlay.setMap(map);
+  }
+  ```
+
+#### [Step 5] 6,000개 마커 대량 렌더링 최적화
+* **방식 A (화면 영역 기반 렌더링 - 현재 쓱싹 방식)**:
+  - `kakao.maps.event.addListener(map, 'idle', () => { ... })` 이벤트로 현재 화면 영역(`map.getBounds()`)에 들어오는 쓰레기통만 화면에 꽂아 60fps 유지.
+  - *출처:* [카카오 이벤트 리스너 문서](https://apis.map.kakao.com/web/documentation/#event)
+* **방식 B (공식 클러스터러 라이브러리)**:
+  - 축소 시 숫자로 묶어주고 확대 시 개별 마커로 펼침.
+  - *출처:* [카카오 지도 MarkerClusterer 샘플](https://apis.map.kakao.com/web/sample/basicClusterer/)
 
 ---
 
