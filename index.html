@@ -286,32 +286,6 @@
     </div>
   </div>
 
-  <!-- In-App Navigation HUD Banner (길찾기 모드 활성화 시 상단 고정) -->
-  <div id="nav-hud" class="fixed top-3 inset-x-3 max-w-md mx-auto z-40 hidden transition-all duration-300 transform -translate-y-4 opacity-0 pointer-events-auto">
-    <div class="bg-gray-900/95 backdrop-blur-xl text-white rounded-3xl p-4 shadow-2xl border border-gray-700/60 flex items-center justify-between gap-3">
-      <div class="flex items-center gap-3 min-w-0">
-        <div class="w-10 h-10 rounded-2xl bg-brand-500 text-white flex items-center justify-center flex-shrink-0 shadow-lg shadow-brand-500/30 animate-pulse">
-          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M12 2L4.5 20.29l.71.71L12 18l6.79 3 .71-.71z"/>
-          </svg>
-        </div>
-        <div class="min-w-0">
-          <div class="flex items-center gap-1.5">
-            <span class="px-1.5 py-0.5 rounded text-[10px] font-black bg-brand-500 text-white">실시간 길안내</span>
-            <span id="nav-hud-target" class="text-xs text-gray-300 font-medium truncate">목적지</span>
-          </div>
-          <div class="flex items-baseline gap-2 mt-0.5">
-            <span id="nav-hud-distance" class="text-xl font-black text-white tracking-tight">--</span>
-            <span id="nav-hud-time" class="text-xs font-bold text-brand-400">도보 계산 중</span>
-          </div>
-        </div>
-      </div>
-      <button id="btn-stop-nav-hud" class="px-3.5 py-2 rounded-xl bg-white/10 hover:bg-white/20 active:scale-95 text-xs font-bold text-gray-200 hover:text-white border border-white/15 transition-all flex-shrink-0">
-        안내 종료
-      </button>
-    </div>
-  </div>
-
   <!-- Arrival Alert Modal (도착 알림 팝업) -->
   <div id="arrival-modal" class="fixed inset-0 z-50 bg-black/40 backdrop-blur-sm hidden items-center justify-center p-4">
     <div class="bg-white rounded-3xl max-w-sm w-full p-6 shadow-2xl text-center space-y-4 transform transition-all">
@@ -917,10 +891,14 @@
         if (data && data.status === 'OK' && Array.isArray(data.path) && data.path.length > 0) {
           activePedestrianPath = data.path;
 
-          // 현재 길안내 대상과 일치할 때만 지도 경로선 및 HUD 즉시 갱신
+          // 보행자 실제 거리 및 소요시간 바텀시트에 연동
+          targetItem.pedestrianDistance = data.totalDistance;
+          targetItem.pedestrianTime = data.totalTime;
+
+          // 현재 길안내 대상과 일치할 때만 지도 경로선 및 바텀시트 즉시 갱신
           if (isNavigating && selectedTrash && selectedTrash.id === targetItem.id) {
             drawGuidePolyline(selectedTrash);
-            updateNavHUD(selectedTrash, data.totalDistance, data.totalTime);
+            updateBottomSheet(selectedTrash);
           }
         }
       } catch (err) {
@@ -947,7 +925,6 @@
       drawGuidePolyline(item);
 
       if (isNavigating) {
-        updateNavHUD(item);
         fetchAndApplyPedestrianRoute(userPos, item);
       }
 
@@ -971,7 +948,10 @@
       const sheetDistance = document.getElementById('sheet-distance');
       const sheetWalkTime = document.getElementById('sheet-walk-time');
 
-      if (isClosest) {
+      if (isNavigating) {
+        sheetBadge.textContent = "🧭 실시간 길안내 중";
+        sheetBadge.className = "px-2 py-0.5 rounded-md text-[11px] font-bold bg-brand-500 text-white animate-pulse";
+      } else if (isClosest) {
         sheetBadge.textContent = "📍 가장 가까운 곳";
         sheetBadge.className = "px-2 py-0.5 rounded-md text-[11px] font-bold bg-brand-50 text-brand-600";
       } else {
@@ -991,9 +971,19 @@
       sheetTitle.textContent = item.name;
       sheetDesc.textContent = item.desc || "상세 설명이 없는 장소입니다.";
 
-      const dist = item.distance !== undefined ? item.distance : calculateDistance(userPos.lat, userPos.lng, item.lat, item.lng);
+      // 도보 내비게이션 중 TMAP 정밀 거리가 있다면 우선 표시, 없으면 유클리드 거리
+      const dist = (isNavigating && item.pedestrianDistance !== undefined)
+        ? item.pedestrianDistance
+        : (item.distance !== undefined ? item.distance : calculateDistance(userPos.lat, userPos.lng, item.lat, item.lng));
+
       sheetDistance.textContent = formatDistance(dist);
-      sheetWalkTime.textContent = calculateWalkTime(dist);
+
+      if (isNavigating && item.pedestrianTime !== undefined) {
+        const mins = Math.max(1, Math.round(item.pedestrianTime / 60));
+        sheetWalkTime.textContent = `도보 약 ${mins}분`;
+      } else {
+        sheetWalkTime.textContent = calculateWalkTime(dist);
+      }
 
       // 외부 길찾기 링크 세팅
       setupNavigationLinks(item);
@@ -1157,12 +1147,11 @@
         }
       }
 
-      // 선택된 목적지 가이드라인 및 바텀시트/HUD 갱신
+      // 선택된 목적지 가이드라인 및 바텀시트 갱신
       if (selectedTrash) {
         drawGuidePolyline(selectedTrash);
         updateBottomSheet(selectedTrash);
         if (isNavigating) {
-          updateNavHUD(selectedTrash);
           checkArrival(selectedTrash);
         }
       }
@@ -1254,8 +1243,9 @@
       btnNav.classList.add('bg-rose-500', 'hover:bg-rose-600', 'shadow-rose-500/25');
       btnNavText.textContent = "안내 종료";
 
-      // 1) 즉시 직선 가이드라인 임시 렌더링 (체감 대기시간 0초 Optimistic UI)
+      // 1) 즉시 직선 가이드라인 임시 렌더링 및 바텀시트 갱신 (대기시간 0초 Optimistic UI)
       drawGuidePolyline(selectedTrash);
+      updateBottomSheet(selectedTrash);
 
       // 2) 보행 밀착 줌 (카카오 level 2: 약 30m 단위)
       if (map) {
@@ -1263,13 +1253,10 @@
         map.panTo(new kakao.maps.LatLng(userPos.lat, userPos.lng));
       }
 
-      // 3) 상단 HUD 열기
-      showNavHUD(selectedTrash);
-
       const statusEl = document.getElementById('sub-status');
       statusEl.textContent = "🧭 횡단보도·도보 길안내 진행 중";
 
-      // 4) TMAP 정밀 보행자 경로 API 비동기 호출
+      // 3) TMAP 정밀 보행자 경로 API 비동기 호출
       fetchAndApplyPedestrianRoute(userPos, selectedTrash);
 
       trackGAEvent('start_navigation', {
@@ -1292,17 +1279,17 @@
       btnNav.classList.add('bg-brand-500', 'hover:bg-brand-600', 'shadow-brand-500/25');
       btnNavText.textContent = "길찾기";
 
-      // 상단 HUD 닫기
-      hideNavHUD();
-
       // 지도 줌 레벨 도보 기본(level 4)으로 복구
       if (map) {
         map.setLevel(4);
       }
 
-      // 점선 가이드라인으로 복구
+      // 점선 가이드라인 및 바텀시트 복구
       if (selectedTrash) {
+        delete selectedTrash.pedestrianDistance;
+        delete selectedTrash.pedestrianTime;
         drawGuidePolyline(selectedTrash);
+        updateBottomSheet(selectedTrash);
       }
 
       const statusEl = document.getElementById('sub-status');
@@ -1311,36 +1298,6 @@
       trackGAEvent('stop_navigation', {
         trash_id: selectedTrash ? selectedTrash.id : null
       });
-    }
-
-    function showNavHUD(target) {
-      const hud = document.getElementById('nav-hud');
-      updateNavHUD(target);
-      hud.classList.remove('hidden');
-      requestAnimationFrame(() => {
-        hud.classList.remove('-translate-y-4', 'opacity-0');
-      });
-    }
-
-    function hideNavHUD() {
-      const hud = document.getElementById('nav-hud');
-      hud.classList.add('-translate-y-4', 'opacity-0');
-      setTimeout(() => {
-        hud.classList.add('hidden');
-      }, 300);
-    }
-
-    function updateNavHUD(target, pedestrianDist, pedestrianTime) {
-      if (!target) return;
-      const dist = pedestrianDist !== undefined ? pedestrianDist : (target.distance !== undefined ? target.distance : calculateDistance(userPos.lat, userPos.lng, target.lat, target.lng));
-      document.getElementById('nav-hud-target').textContent = target.name;
-      document.getElementById('nav-hud-distance').textContent = formatDistance(dist);
-      if (pedestrianTime !== undefined) {
-        const mins = Math.max(1, Math.round(pedestrianTime / 60));
-        document.getElementById('nav-hud-time').textContent = `도보 약 ${mins}분`;
-      } else {
-        document.getElementById('nav-hud-time').textContent = calculateWalkTime(dist);
-      }
     }
 
     function checkArrival(target) {
@@ -1435,11 +1392,6 @@
         } else {
           startNavigation();
         }
-      });
-
-      // HUD 내비 종료 버튼
-      document.getElementById('btn-stop-nav-hud').addEventListener('click', () => {
-        stopNavigation();
       });
 
       // 도착 알림 모달 확인 버튼
