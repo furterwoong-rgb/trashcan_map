@@ -93,7 +93,7 @@
       max-height: none !important;
     }
 
-    /* Navigation Arrow User Marker & Pulse Animation */
+    /* Pure Navigation Arrow User Marker */
     .custom-pulse-marker {
       position: relative;
       width: 38px;
@@ -102,15 +102,6 @@
       align-items: center;
       justify-content: center;
       pointer-events: none;
-    }
-    .pulse-ring {
-      position: absolute;
-      width: 28px;
-      height: 28px;
-      border-radius: 50%;
-      background-color: rgba(49, 130, 246, 0.35);
-      animation: pulseAnimation 2s cubic-bezier(0.25, 1, 0.5, 1) infinite;
-      z-index: 1;
     }
     /* 360도 회전하는 내비게이션 화살표 컨테이너 */
     .heading-pointer {
@@ -122,39 +113,11 @@
       justify-content: center;
       transform-origin: center center;
       will-change: transform;
-      z-index: 2;
     }
     .heading-arrow-svg {
       width: 100%;
       height: 100%;
-      filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.28));
-    }
-    .pulse-core {
-      position: absolute;
-      top: 50%;
-      left: 50%;
-      transform: translate(-50%, -50%);
-      width: 11px;
-      height: 11px;
-      border-radius: 50%;
-      background-color: #3182F6;
-      border: 2px solid #FFFFFF;
-      box-shadow: 0 1px 3px rgba(0,0,0,0.25);
-      z-index: 3;
-    }
-    @keyframes pulseAnimation {
-      0% {
-        transform: scale(0.6);
-        opacity: 0.9;
-      }
-      80% {
-        transform: scale(2.4);
-        opacity: 0;
-      }
-      100% {
-        transform: scale(2.6);
-        opacity: 0;
-      }
+      filter: drop-shadow(0 3px 6px rgba(0, 0, 0, 0.35));
     }
 
     /* Trash Marker Pin Animation */
@@ -569,12 +532,10 @@
         const pulseEl = document.createElement('div');
         pulseEl.className = 'custom-pulse-marker';
         pulseEl.innerHTML = `
-          <div class="pulse-ring"></div>
           <div id="user-heading-pointer" class="heading-pointer">
             <svg class="heading-arrow-svg" viewBox="0 0 32 32" fill="none">
-              <path d="M16 2.5 L26 24.5 L16 19.5 L6 24.5 Z" fill="#3182F6" stroke="#FFFFFF" stroke-width="2" stroke-linejoin="round"/>
+              <path d="M16 2 L27 26 L16 20.5 L5 26 Z" fill="#3182F6" stroke="#FFFFFF" stroke-width="2.5" stroke-linejoin="round"/>
             </svg>
-            <div class="pulse-core"></div>
           </div>
         `;
         userOverlay = new kakao.maps.CustomOverlay({
