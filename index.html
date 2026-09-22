@@ -96,8 +96,8 @@
     /* Pure Navigation Arrow User Marker (Elongated & Smooth) */
     .custom-pulse-marker {
       position: relative;
-      width: 42px;
-      height: 42px;
+      width: 34px;
+      height: 34px;
       display: flex;
       align-items: center;
       justify-content: center;
@@ -106,8 +106,8 @@
     /* 360도 회전하는 내비게이션 화살표 컨테이너 */
     .heading-pointer {
       position: relative;
-      width: 40px;
-      height: 40px;
+      width: 32px;
+      height: 32px;
       display: flex;
       align-items: center;
       justify-content: center;
@@ -117,7 +117,7 @@
     .heading-arrow-svg {
       width: 100%;
       height: 100%;
-      filter: drop-shadow(0 3px 6px rgba(0, 0, 0, 0.35));
+      filter: drop-shadow(0 2.5px 5px rgba(0, 0, 0, 0.32));
     }
 
     /* Trash Marker Pin Animation */
@@ -196,7 +196,7 @@
   </header>
 
   <!-- Floating Action Buttons (Right-Center) -->
-  <div class="fixed right-4 z-20 flex flex-col gap-2.5" style="bottom: calc(230px + env(safe-area-inset-bottom, 0px));">
+  <div class="fixed right-4 z-20 flex flex-col gap-2.5" style="bottom: calc(220px + env(safe-area-inset-bottom, 0px));">
     <button id="btn-recenter" class="w-11 h-11 rounded-2xl bg-white shadow-floating border border-gray-100 flex items-center justify-center text-gray-700 hover:text-brand-500 active:scale-90 transition-all" title="내 위치로 이동">
       <svg class="w-5 h-5 text-gray-700 hover:text-brand-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"/>
@@ -205,8 +205,8 @@
     </button>
   </div>
 
-  <!-- Bottom Sheet Card (Fixed 18px Parallel Move Upward + Safe Area) -->
-  <div class="fixed inset-x-0 z-20 px-3 pointer-events-none" style="bottom: calc(18px + env(safe-area-inset-bottom, 0px));">
+  <!-- Bottom Sheet Card (Fixed 8px Parallel Move Upward + Safe Area) -->
+  <div class="fixed inset-x-0 z-20 px-3 pointer-events-none" style="bottom: calc(8px + env(safe-area-inset-bottom, 0px));">
     <div class="max-w-md mx-auto pointer-events-auto">
       <div id="bottom-sheet" class="bg-white/95 backdrop-blur-xl rounded-3xl p-5 shadow-sheet border border-gray-200/70 transition-all duration-300 transform translate-y-0">
         
