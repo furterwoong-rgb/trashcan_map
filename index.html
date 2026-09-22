@@ -93,34 +93,54 @@
       max-height: none !important;
     }
 
-    /* Marker Pulse Animation & Smooth Real-time Transition */
+    /* Navigation Arrow User Marker & Pulse Animation */
     .custom-pulse-marker {
-      transition: transform 0.4s cubic-bezier(0.25, 1, 0.5, 1);
-    }
-    .pulse-dot-container {
       position: relative;
-      width: 28px;
-      height: 28px;
+      width: 38px;
+      height: 38px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      pointer-events: none;
     }
     .pulse-ring {
       position: absolute;
+      width: 28px;
+      height: 28px;
+      border-radius: 50%;
+      background-color: rgba(49, 130, 246, 0.35);
+      animation: pulseAnimation 2s cubic-bezier(0.25, 1, 0.5, 1) infinite;
+      z-index: 1;
+    }
+    /* 360도 회전하는 내비게이션 화살표 컨테이너 */
+    .heading-pointer {
+      position: relative;
+      width: 36px;
+      height: 36px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transform-origin: center center;
+      will-change: transform;
+      z-index: 2;
+    }
+    .heading-arrow-svg {
       width: 100%;
       height: 100%;
-      border-radius: 50%;
-      background-color: rgba(49, 130, 246, 0.4);
-      animation: pulseAnimation 2s cubic-bezier(0.25, 1, 0.5, 1) infinite;
+      filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.28));
     }
     .pulse-core {
       position: absolute;
       top: 50%;
       left: 50%;
       transform: translate(-50%, -50%);
-      width: 14px;
-      height: 14px;
+      width: 11px;
+      height: 11px;
       border-radius: 50%;
       background-color: #3182F6;
-      border: 2.5px solid #FFFFFF;
-      box-shadow: 0 2px 6px rgba(0,0,0,0.3);
+      border: 2px solid #FFFFFF;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.25);
+      z-index: 3;
     }
     @keyframes pulseAnimation {
       0% {
@@ -128,11 +148,11 @@
         opacity: 0.9;
       }
       80% {
-        transform: scale(2.6);
+        transform: scale(2.4);
         opacity: 0;
       }
       100% {
-        transform: scale(2.8);
+        transform: scale(2.6);
         opacity: 0;
       }
     }
@@ -537,7 +557,7 @@
     }
 
     // ==========================================
-    // 6. 내 위치 펄스 마커 (카카오 CustomOverlay)
+    // 6. 내 위치 360도 내비게이션 화살표 마커 (카카오 CustomOverlay)
     // ==========================================
     function renderUserMarker() {
       if (!map) return;
@@ -549,8 +569,11 @@
         const pulseEl = document.createElement('div');
         pulseEl.className = 'custom-pulse-marker';
         pulseEl.innerHTML = `
-          <div class="pulse-dot-container">
-            <div class="pulse-ring"></div>
+          <div class="pulse-ring"></div>
+          <div id="user-heading-pointer" class="heading-pointer">
+            <svg class="heading-arrow-svg" viewBox="0 0 32 32" fill="none">
+              <path d="M16 2.5 L26 24.5 L16 19.5 L6 24.5 Z" fill="#3182F6" stroke="#FFFFFF" stroke-width="2" stroke-linejoin="round"/>
+            </svg>
             <div class="pulse-core"></div>
           </div>
         `;
@@ -562,6 +585,91 @@
           yAnchor: 0.5,
           zIndex: 1000
         });
+
+        // 마커 생성 직후 센서가 이미 작동 중이었다면 현재 각도 즉시 반영
+        if (targetHeading !== 0) {
+          const pointerEl = document.getElementById('user-heading-pointer');
+          if (pointerEl) {
+            pointerEl.style.transform = `rotate(${currentHeading.toFixed(1)}deg)`;
+          }
+        }
+      }
+    }
+
+    // ==========================================
+    // 6-1. 스마트폰 방향 센서 (360도 나침반/방위각 회전 제어)
+    // ==========================================
+    let currentHeading = 0;       // 화면에 렌더링되고 있는 부드러운 각도 (0~360)
+    let targetHeading = 0;        // 센서로부터 실시간 수신한 목표 각도
+    let isHeadingTracking = false;
+    let headingAnimFrame = null;
+
+    // 모바일 센서 이벤트 수신
+    function handleOrientationEvent(event) {
+      let heading = null;
+
+      // 1. iOS Safari (webkitCompassHeading: 0° = 북쪽, 시계방향 0~360°)
+      if (typeof event.webkitCompassHeading !== 'undefined' && event.webkitCompassHeading !== null) {
+        heading = event.webkitCompassHeading;
+      }
+      // 2. Android Chrome (deviceorientationabsolute 또는 event.alpha)
+      else if (event.alpha !== null && typeof event.alpha !== 'undefined') {
+        // 안드로이드는 북쪽 기준 시계방향으로 360 - alpha 변환
+        heading = (360 - event.alpha) % 360;
+      }
+
+      if (heading !== null && !isNaN(heading)) {
+        targetHeading = (heading + 360) % 360;
+        if (!headingAnimFrame) {
+          startHeadingAnimationLoop();
+        }
+      }
+    }
+
+    // 초당 60프레임 EMA 스무딩 및 최단각 회전 루프
+    function startHeadingAnimationLoop() {
+      function animate() {
+        const pointerEl = document.getElementById('user-heading-pointer');
+        if (pointerEl) {
+          // 0° ↔ 360° 경계 회전 점프 방지 (최단각 공식: 359도에서 1도로 갈 때 358도 역회전 방지)
+          let diff = (targetHeading - currentHeading + 540) % 360 - 180;
+
+          // 0.25도 이상의 유의미한 변화가 있을 때만 부드럽게 보간 (손떨림 노이즈 필터링)
+          if (Math.abs(diff) > 0.25) {
+            currentHeading = (currentHeading + diff * 0.18) % 360;
+            if (currentHeading < 0) currentHeading += 360;
+            pointerEl.style.transform = `rotate(${currentHeading.toFixed(1)}deg)`;
+          }
+        }
+        headingAnimFrame = requestAnimationFrame(animate);
+      }
+      headingAnimFrame = requestAnimationFrame(animate);
+    }
+
+    // iOS 13+ 권한 승인 및 모바일 방향 센서 활성화 함수
+    function startOrientationTracking() {
+      if (isHeadingTracking) return;
+
+      if (typeof DeviceOrientationEvent !== 'undefined' && typeof DeviceOrientationEvent.requestPermission === 'function') {
+        // iOS Safari 환경: 사용자 명시적 터치 제스처에서 호출되어야 함
+        DeviceOrientationEvent.requestPermission()
+          .then(permissionState => {
+            if (permissionState === 'granted') {
+              isHeadingTracking = true;
+              window.addEventListener('deviceorientation', handleOrientationEvent, true);
+            }
+          })
+          .catch(err => {
+            console.warn('[쓱싹] 방향 센서 권한 요청 에러:', err);
+          });
+      } else if (typeof window !== 'undefined') {
+        // Android 및 기타 브라우저: 권한 팝업 없이 즉시 리스닝
+        isHeadingTracking = true;
+        if ('ondeviceorientationabsolute' in window) {
+          window.addEventListener('deviceorientationabsolute', handleOrientationEvent, true);
+        } else {
+          window.addEventListener('deviceorientation', handleOrientationEvent, true);
+        }
       }
     }
 
@@ -1371,6 +1479,8 @@
       document.getElementById('btn-refresh').addEventListener('click', () => {
         trackGAEvent('click_refresh_location');
         userManuallySelected = false;
+        lastProcessedPos = null; // 정지 상태에서도 즉시 GPS 갱신되도록 리셋
+        startOrientationTracking();
         requestLocation();
       });
 
@@ -1387,6 +1497,7 @@
 
       // 웹 자체 도보 내비게이션 토글 버튼
       document.getElementById('btn-start-nav').addEventListener('click', () => {
+        startOrientationTracking();
         if (isNavigating) {
           stopNavigation();
         } else {
@@ -1432,6 +1543,7 @@
       btnAllowLocation.addEventListener('click', () => {
         trackGAEvent('click_location_consent', { action: 'allow' });
         hideLocationModal();
+        startOrientationTracking(); // iOS 제스처 컨텍스트에서 방향 센서 권한 요청
         requestLocation();
       });
 
@@ -1511,6 +1623,7 @@
       initMap();
       setupEventListeners();
       loadSeoulTrashData();
+      startOrientationTracking(); // 안드로이드 등 제스처 불필요 환경 즉시 센서 리스닝 시작
       
       // 웹사이트 진입 시 항상 위치 사용 여부를 묻는 모달 팝업 표시
       const locationModal = document.getElementById('location-modal');
